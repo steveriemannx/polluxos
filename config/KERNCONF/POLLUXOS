@@ -1,0 +1,26 @@
+# PolluxOS kernel configuration.
+# 基于 amd64 GENERIC 起底，QEMU 下用 UEFI GOP (efifb) 即可出画面；
+# 真机硬件加速再按机型加对应 DRM 驱动。
+#
+# 构建时由 scripts/build.sh 拷贝到 base/freebsd-src/sys/amd64/conf/POLLUXOS，
+# 避免直接修改 base 子模块。
+
+include GENERIC
+
+ident          POLLUXOS
+
+# --- QEMU/开发便利 -------------------------------------------------------
+# 串口+键盘: GENERIC 已含 vty/vt; 若想纯串口调试可加:
+# options        BREAK_TO_DEBUGGER
+
+# --- 后续按需添加 --------------------------------------------------------
+# 硬件加速 (真实 GPU):
+# options        DRM_DEBUGGER          # 仅调试用
+# device         i915kms               # Intel
+# device         amdgpu                # AMD
+# 注意: GENERIC 中 GPU 驱动以模块形式提供(kldload)，不需要时不要编进内核。
+
+# --- PolluxOS 专属 ----------------------------------------------------------
+options         VTP                 # vt 虚拟终端
+options         VTTE                # vt 终端仿真器
+# 未来的自定义 vt 图形化改动可以在此留钩子

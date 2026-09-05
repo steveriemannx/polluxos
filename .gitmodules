@@ -1,0 +1,4 @@
+[submodule "base/freebsd-src"]
+	branch = stable/15
+	path = base/freebsd-src
+	url = https://github.com/freebsd/freebsd-src

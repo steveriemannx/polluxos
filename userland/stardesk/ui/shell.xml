@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PolluxOS 桌面壳布局(占位)。真实布局跟随 dui 的 XML 规范
+     (参考 dui/bin/resources/themes/default 下的示例)。
+     暂无内容的骨架: dui 控件树从这里生长。 -->
+<VerticalLayout>
+  <VerticalLayout name="taskbar" height="24">
+    <Button name="launcher" text="PolluxOS" />
+  </VerticalLayout>
+  <VerticalLayout name="desktop" />
+</VerticalLayout>
