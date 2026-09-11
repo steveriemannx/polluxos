@@ -7,6 +7,9 @@
 #include <cstring>
 #include <cstdlib>
 #include <csignal>
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#include <sys/user.h>
 #include <unistd.h>
 
 namespace {
@@ -26,6 +29,7 @@ const DString kMenuItemHot  = DUI_T("#330A84FF");
 const DString kDockBg       = DUI_T("#E6FFFFFF");   // frosted dock
 const DString kDockBorder   = DUI_T("#4DFFFFFF");
 const DString kDockSeparator= DUI_T("#33000000");   // hairline before the trash
+const DString kDockDot      = DUI_T("#99000000");   // running-app indicator
 const DString kTextDark     = DUI_T("#FF1D1D1F");
 const DString kTextBody     = DUI_T("#FF3A3A3C");
 const DString kTextHint     = DUI_T("#FF8E8E93");
@@ -128,11 +132,11 @@ const int PolluxOSForm::kQuickMenuCount =
 // Like macOS, the dock shows icons only - names are tooltips.
 // An empty `cmd` is the Launchpad tile: clicking opens the in-shell app grid.
 const PolluxOSForm::DockApp PolluxOSForm::kDockApps[] = {
-    { "终端",   ">_",  "polluxdesk/icons/terminal.svg", "#FF4C9FDB", "#FF2E6FA3", "wayst" },
-    { "启动台", "⊞",   "polluxdesk/icons/apps.svg", "#FF8E7CC3", "#FF5F4B8B", "" },
-    { "文件",   "~",   "polluxdesk/icons/files.svg", "#FFF0A35C", "#FFC97A2B", "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_files\" 2>/dev/null || wayst -e sh -c 'echo 未安装 polluxdesk_files; read _'" },
-    { "浏览器", "@",   "polluxdesk/icons/browser.svg", "#FF5AA9E6", "#FF2F6FAB", "wayst -e sh -c 'firefox 2>/dev/null || chromium 2>/dev/null || (echo \"未安装浏览器\"; sleep 2)'" },
-    { "设置",   "*",   "polluxdesk/icons/settings.svg", "#FF9AA4B0", "#FF6B7580", "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_settings\"" },
+    { "终端",   ">_",  "polluxdesk/icons/terminal.svg", "#FF4C9FDB", "#FF2E6FA3", "wayst", "wayst" },
+    { "启动台", "⊞",   "polluxdesk/icons/apps.svg", "#FF8E7CC3", "#FF5F4B8B", "", "" },
+    { "文件",   "~",   "polluxdesk/icons/files.svg", "#FFF0A35C", "#FFC97A2B", "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_files\" 2>/dev/null || wayst -e sh -c 'echo 未安装 polluxdesk_files; read _'", "polluxdesk_files" },
+    { "浏览器", "@",   "polluxdesk/icons/browser.svg", "#FF5AA9E6", "#FF2F6FAB", "wayst -e sh -c 'firefox 2>/dev/null || chromium 2>/dev/null || (echo \"未安装浏览器\"; sleep 2)'", "firefox|chromium|chrome" },
+    { "设置",   "*",   "polluxdesk/icons/settings.svg", "#FF9AA4B0", "#FF6B7580", "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_settings\"", "polluxdesk_settings" },
 };
 
 PolluxOSForm::PolluxOSForm()
@@ -724,6 +728,124 @@ void PolluxOSForm::BuildDesktopArea(ui::VBox* pRoot)
     });
 }
 
+// The compositor identifies a window's program by the client's process id:
+// dui hard-codes its app_id to one value for every window it opens, and the
+// title follows the document rather than the program.
+static std::string ExeNameForPid(long pid)
+{
+    if (pid <= 0) {
+        return std::string();
+    }
+    int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, static_cast<int>(pid) };
+    struct kinfo_proc info;
+    size_t size = sizeof(info);
+    if (sysctl(mib, 4, &info, &size, nullptr, 0) != 0 || size == 0) {
+        return std::string();
+    }
+    return std::string(info.ki_comm);
+}
+
+static std::vector<std::string> SplitFields(const std::string& line, char sep)
+{
+    std::vector<std::string> fields;
+    size_t start = 0;
+    while (true) {
+        size_t end = line.find(sep, start);
+        if (end == std::string::npos) {
+            fields.push_back(line.substr(start));
+            return fields;
+        }
+        fields.push_back(line.substr(start, end - start));
+        start = end + 1;
+    }
+}
+
+void PolluxOSForm::PollWindowState()
+{
+    const std::string path = pollux::StatePath();
+    const unsigned long long mtime = pollux::MtimeNs(path);
+    if (mtime == m_stateMtime) {
+        return;   // nothing has been written since the last look
+    }
+    m_stateMtime = mtime;
+
+    const std::vector<std::string> lines = pollux::ReadLines(path);
+    m_windows.clear();
+
+    // Trust the list only while the compositor that wrote it is alive. A
+    // compositor restart leaves the file naming a process that no longer
+    // exists, and its windows went with it.
+    const std::string pidText = pollux::ValueOf(lines, "desktop_pid");
+    const long compositorPid = pidText.empty() ? 0 : std::atol(pidText.c_str());
+    if (compositorPid <= 0 || ::kill(static_cast<pid_t>(compositorPid), 0) != 0) {
+        ApplyRunningIndicators();
+        return;
+    }
+
+    for (const std::string& line : lines) {
+        if (line.compare(0, 4, "win=") != 0) {
+            continue;
+        }
+        // id|app_id|title|minimized|focused|width|height|pid
+        const std::vector<std::string> f = SplitFields(line.substr(4), '|');
+        if (f.size() < 8) {
+            continue;   // truncated or hand-edited; skip rather than guess
+        }
+        WindowInfo info;
+        info.id        = std::strtoul(f[0].c_str(), nullptr, 10);
+        info.appId     = f[1];
+        info.title     = f[2];
+        info.minimized = f[3] == "1";
+        info.focused   = f[4] == "1";
+        info.width     = std::atoi(f[5].c_str());
+        info.height    = std::atoi(f[6].c_str());
+        info.pid       = std::atol(f[7].c_str());
+        info.exe       = ExeNameForPid(info.pid);
+        m_windows.push_back(info);
+    }
+    ApplyRunningIndicators();
+}
+
+bool PolluxOSForm::IsAppRunning(const char* exeList) const
+{
+    if (exeList == nullptr || exeList[0] == '\0') {
+        return false;   // this tile never shows a dot
+    }
+    const std::string list(exeList);
+    for (const WindowInfo& info : m_windows) {
+        if (info.exe.empty()) {
+            continue;
+        }
+        // "|"-separated so one tile can stand for any of several programs --
+        // the browser tile covers whichever of firefox/chromium got installed.
+        size_t start = 0;
+        while (start <= list.size()) {
+            size_t end = list.find('|', start);
+            if (end == std::string::npos) {
+                end = list.size();
+            }
+            if (list.compare(start, end - start, info.exe) == 0) {
+                return true;
+            }
+            start = end + 1;
+        }
+    }
+    return false;
+}
+
+void PolluxOSForm::ApplyRunningIndicators()
+{
+    const int count = static_cast<int>(sizeof(kDockApps) / sizeof(kDockApps[0]));
+    for (size_t i = 0; i < m_dockDots.size() && static_cast<int>(i) < count; ++i) {
+        if (m_dockDots[i] == nullptr) {
+            continue;
+        }
+        m_dockDots[i]->SetBkColor(IsAppRunning(kDockApps[i].exe) ? kDockDot
+                                                                 : kTransparent);
+        m_dockDots[i]->Invalidate();
+    }
+}
+
 // dui takes a corner radius through two independent APIs that have to agree:
 // the state colours carry their own rounding, and border_round draws the
 // border. Setting one and not the other silently paints two different
@@ -779,17 +901,12 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
     pTile->SetToolTipText(DUI_T("废纸篓"));
     SetRadius(pTile, scale(14, 56), true);
 
-    // Two levels, because dui splits centring in a VBox between the layout
-    // and the child: child_align="vcenter" offsets the whole run of children
-    // vertically, but there is no horizontal equivalent -- each child has to
-    // carry its own halign. (A button also draws only its label text
-    // centred; children always start from the tile's corner.)
-    ui::VBox* pCan = new ui::VBox(pWindow);
-    pCan->SetAttribute(DUI_T("width"), Num(size));
-    pCan->SetAttribute(DUI_T("height"), Num(size));
-    pCan->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
-    pCan->SetMouseEnabled(false);
-    pTile->AddItem(pCan);
+    // dui splits centring in a VBox between the layout and the child:
+    // child_align="vcenter" offsets the whole run of children vertically, but
+    // there is no horizontal equivalent, so each part carries its own
+    // halign="center". With only the layout attribute the can sits against
+    // the tile's left edge.
+    pTile->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
 
     // Lid handle, lid, then the body: stacked vertically so the can grows
     // from the top down as the icon size changes.
@@ -805,7 +922,7 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
     pHandle->SetBkColor(DUI_T("#FFF2F2F4"));
     pHandle->SetMouseEnabled(false);
     SetRadius(pHandle, std::max(1, handleH / 2), false);
-    pCan->AddItem(pHandle);
+    pTile->AddItem(pHandle);
 
     ui::Control* pLid = new ui::Control(pWindow);
     pLid->SetAttribute(DUI_T("halign"), DUI_T("center"));
@@ -816,13 +933,13 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
     pLid->SetAttribute(DUI_T("border_size"), DUI_T("1"));
     pLid->SetMouseEnabled(false);
     SetRadius(pLid, std::max(1, lidH / 2), false);
-    pCan->AddItem(pLid);
+    pTile->AddItem(pLid);
 
     ui::Control* pGap = new ui::Control(pWindow);
     pGap->SetAttribute(DUI_T("halign"), DUI_T("center"));
     pGap->SetAttribute(DUI_T("height"), Num(std::max(1, scale(2, 56))));
     pGap->SetMouseEnabled(false);
-    pCan->AddItem(pGap);
+    pTile->AddItem(pGap);
 
     // HBox so the three ribs stand upright.
     ui::HBox* pBody = new ui::HBox(pWindow);
@@ -847,7 +964,7 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
         pRib->SetMouseEnabled(false);
         pBody->AddItem(pRib);
     }
-    pCan->AddItem(pBody);
+    pTile->AddItem(pBody);
 
     return pTile;
 }
@@ -885,6 +1002,13 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
     SetRadius(pDock, barRadius, false);
     pDockRow->AddItem(pDock);
 
+    // Room under each tile for the running-app dot. The lane is reserved
+    // whether or not anything is running, so tiles never shift as apps start
+    // and stop -- the dot only changes colour.
+    const int dotLaneH = std::max(5, iconPx / 8);
+    const int dotSize  = std::max(3, iconPx / 14);
+
+    m_dockDots.clear();
     const int kDockCount = static_cast<int>(sizeof(kDockApps) / sizeof(kDockApps[0]));
     for (int i = 0; i < kDockCount; ++i) {
         // One icon tile per app; the label is a tooltip, macOS style.
@@ -901,7 +1025,9 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
         pIcon->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
         pIcon->SetAttribute(DUI_T("height"), Num(iconPx));
         pIcon->SetAttribute(DUI_T("width"), Num(iconPx));
-        pIcon->SetAttribute(DUI_T("margin"), MarginH(iconGap));
+        // The wrapper handles the spacing; the tile centres itself in it,
+        // since a VBox only centres children that carry their own halign.
+        pIcon->SetAttribute(DUI_T("halign"), DUI_T("center"));
         pIcon->SetBkColor(DString(kDockApps[i].color));
         pIcon->SetBkColor2(DString(kDockApps[i].color2));
         pIcon->SetBkColor2Direction(DUI_T("1"));   // left -> right gradient
@@ -919,7 +1045,27 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
             }
             return true;
         });
-        pDock->AddItem(pIcon);
+
+        ui::VBox* pItem = new ui::VBox(this);
+        pItem->SetAttribute(DUI_T("width"), Num(iconPx));
+        pItem->SetAttribute(DUI_T("height"), Num(iconPx + dotLaneH));
+        pItem->SetAttribute(DUI_T("margin"), MarginH(iconGap));
+
+        pItem->AddItem(pIcon);
+
+        ui::Control* pDot = new ui::Control(this);
+        pDot->SetAttribute(DUI_T("width"), Num(dotSize));
+        pDot->SetAttribute(DUI_T("height"), Num(dotSize));
+        pDot->SetAttribute(DUI_T("halign"), DUI_T("center"));
+        pDot->SetAttribute(DUI_T("margin"),
+            ui::StringUtil::Printf(DUI_T("0,%d,0,0"), std::max(1, dotLaneH - dotSize - 2)));
+        pDot->SetBkColor(kTransparent);
+        pDot->SetMouseEnabled(false);
+        SetRadius(pDot, dotSize / 2, false);
+        pItem->AddItem(pDot);
+        m_dockDots.push_back(pDot);
+
+        pDock->AddItem(pItem);
     }
 
     // Right-hand side, inside the bar exactly as macOS has it: a hairline,
@@ -950,13 +1096,24 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
 void PolluxOSForm::StartClock()
 {
     UpdateClock();
+    // The repeat count matters: dui documents -1 as "repeat indefinitely", but
+    // the test it re-arms on is `uRepeatTime > 0`, which -1 fails. Leaving the
+    // default in place means the callback runs once and the timer is dropped --
+    // which is why the menu-bar clock froze a second after startup and stayed
+    // frozen. A large positive count is decremented once per fire and outlasts
+    // any session.
+    constexpr int32_t kRepeatForSession = 0x7FFFFFFF;
     m_clockTimerId = ui::GlobalManager::Instance().Timer().AddTimer(GetWeakFlag(), [this]() {
         UpdateClock();
-    }, 1000);
+    }, 1000, kRepeatForSession);
 }
 
 void PolluxOSForm::UpdateClock()
 {
+    // Runs before the clock-label guard below so the dock keeps tracking
+    // running apps even if no clock label was ever built.
+    PollWindowState();
+
     if (m_pClockLabel == nullptr && m_pDesktopClockLabel == nullptr &&
         m_pDesktopDateLabel == nullptr) {
         return;

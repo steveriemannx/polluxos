@@ -7,6 +7,8 @@
 #include "PolluxSettings.h"
 
 #include <memory>
+#include <string>
+#include <vector>
 
 class LaunchPadForm;
 
@@ -61,6 +63,27 @@ private:
     void StartClock();
     void UpdateClock();
 
+    /** One window as reported by the compositor's state file. */
+    struct WindowInfo
+    {
+        unsigned long id = 0;
+        std::string   appId;
+        std::string   title;
+        bool          minimized = false;
+        bool          focused = false;
+        int           width = 0;
+        int           height = 0;
+        long          pid = 0;
+        std::string   exe;   // resolved from pid
+    };
+
+    /** Re-read the compositor's window list if it has been rewritten since
+     *  the last look, and repaint the dock's running indicators if the set
+     *  of running applications changed. */
+    void PollWindowState();
+    void ApplyRunningIndicators();
+    bool IsAppRunning(const char* exeList) const;
+
     void LaunchApp(const char* cmdline);
 
     void ToggleMenu(int menuIndex);
@@ -105,6 +128,8 @@ private:
         const char* color;   // macOS-like icon color ("#RRGGBB", gradient base)
         const char* color2;  // gradient end color
         const char* cmd;     // shell command
+        const char* exe;     // executable names that light the running dot,
+                             // "|"-separated; empty for tiles that never do
     } kDockApps[];
 
     ui::VBox*    m_pMenuPanel = nullptr;
@@ -120,6 +145,16 @@ private:
     // the menus and everything else that follows the appearance read it here
     // rather than re-reading the file per control.
     pollux::Settings m_settings;
+
+    // Window state published by the compositor, refreshed on the clock timer.
+    // Polled rather than signalled: the shell already ticks once a second and
+    // that is well below the threshold where a running indicator looks late.
+    std::vector<WindowInfo> m_windows;
+    unsigned long long m_stateMtime = 0;
+    // Indicator dot per dock tile, index-aligned with kDockApps. The controls
+    // persist across state changes; only their colour is repainted, so an app
+    // starting never rebuilds the dock.
+    std::vector<ui::Control*> m_dockDots;
 
     ui::Label* m_pClockLabel = nullptr;
     ui::Label* m_pDesktopClockLabel = nullptr;

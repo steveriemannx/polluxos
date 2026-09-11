@@ -12,6 +12,7 @@
 #include <math.h>
 #include <time.h>
 #include <signal.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <libdrm/drm_fourcc.h>
 #include <wayland-server-core.h>
@@ -102,6 +103,10 @@ struct polluxdesk_server {
 	struct wlr_output_layout *output_layout;
 	struct wl_list outputs;
 	struct wl_listener new_output;
+
+	/* Bumped by every write_window_state(); lets the shell tell a live
+	 * window list from one left behind by an exited compositor. */
+	unsigned int state_generation;
 	bool cursor_warped;
 };
 
@@ -808,6 +813,104 @@ static void server_update_desktop_menu_layer(struct polluxdesk_server *server,
 	}
 }
 
+/* ---------------------------------------------------------------------------
+ * Window state, published for the desktop shell.
+ *
+ * The shell's only way of talking to the compositor is its window title, and
+ * that channel runs one way. "Which programs are running, and which of their
+ * windows are minimized" is the other direction, so the compositor writes it
+ * to a file instead and the shell picks it up on the one-second timer it
+ * already runs. No signal, no new protocol, and a hand-edited file is just
+ * as valid as anything written here.
+ *
+ * Written atomically: the shell reads on a timer and must never catch half a
+ * record.
+ *
+ * Each record carries app_id, title, the minimized and focused flags, the
+ * window size and the client's process id. The pid is the only usable
+ * identity: dui hard-codes app_id, and the title changes with the document.
+ * ------------------------------------------------------------------------ */
+
+/* '|' separates the fields and '\n' ends the record, so a title containing
+ * either would forge fields for whoever parses the file. */
+static void state_sanitize(const char *src, char *dst, size_t size) {
+	size_t i = 0;
+	for (; src != NULL && src[i] != '\0' && i + 1 < size; ++i) {
+		char c = src[i];
+		dst[i] = (c == '|' || c == '\n' || c == '\r') ? ' ' : c;
+	}
+	dst[i] = '\0';
+}
+
+static void write_window_state(struct polluxdesk_server *server) {
+	const char *home = getenv("HOME");
+	if (home == NULL) {
+		return;
+	}
+	char dir[1024];
+	char path[1088];
+	char tmp[1120];
+	snprintf(dir, sizeof(dir), "%s/.config/polluxdesk", home);
+	mkdir(dir, 0755);   /* already existing is the normal case */
+	snprintf(path, sizeof(path), "%s/state.conf", dir);
+	snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+
+	FILE *file = fopen(tmp, "w");
+	if (file == NULL) {
+		return;
+	}
+
+	server->state_generation++;
+	fprintf(file, "gen=%u\n", server->state_generation);
+	fprintf(file, "desktop_pid=%ld\n", (long)getpid());
+
+	struct wlr_surface *focused = server->seat != NULL
+		? server->seat->keyboard_state.focused_surface : NULL;
+
+	struct polluxdesk_toplevel *toplevel;
+	wl_list_for_each(toplevel, &server->toplevels, link) {
+		/* The desktop shell and the launchpad are not applications: they
+		 * must never collect a running indicator or a window thumbnail. */
+		if (toplevel->is_desktop || toplevel->is_overlay) {
+			continue;
+		}
+		char app_id[256];
+		char title[512];
+		state_sanitize(toplevel->xdg_toplevel->app_id, app_id, sizeof(app_id));
+		state_sanitize(toplevel->xdg_toplevel->title, title, sizeof(title));
+
+		/* dui hard-codes its app_id to one value for every window, so the
+		 * app_id cannot say which program a window belongs to. The client's
+		 * process id can: the reader resolves it to an executable name. */
+		pid_t pid = 0;
+		uid_t uid = 0;
+		gid_t gid = 0;
+		struct wl_resource *resource =
+			toplevel->xdg_toplevel->base->surface->resource;
+		if (resource != NULL) {
+			struct wl_client *client = wl_resource_get_client(resource);
+			if (client != NULL) {
+				wl_client_get_credentials(client, &pid, &uid, &gid);
+			}
+		}
+
+		fprintf(file, "win=%lu|%s|%s|%d|%d|%d|%d|%ld\n",
+			(unsigned long)toplevel,
+			app_id,
+			title,
+			toplevel->minimized ? 1 : 0,
+			toplevel->xdg_toplevel->base->surface == focused ? 1 : 0,
+			toplevel->xdg_toplevel->base->geometry.width,
+			toplevel->xdg_toplevel->base->geometry.height,
+			(long)pid);
+	}
+
+	fflush(file);
+	fsync(fileno(file));
+	fclose(file);
+	rename(tmp, path);
+}
+
 static void toggle_maximize(struct polluxdesk_toplevel *toplevel) {
 	if (toplevel->is_desktop) {
 		return;
@@ -835,6 +938,7 @@ static void toggle_maximize(struct polluxdesk_toplevel *toplevel) {
 		wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel, false);
 		toplevel->maximized = false;
 	}
+	write_window_state(server);
 }
 
 static void minimize_toplevel(struct polluxdesk_toplevel *toplevel) {
@@ -844,6 +948,7 @@ static void minimize_toplevel(struct polluxdesk_toplevel *toplevel) {
 	toplevel->minimized = true;
 	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
 	wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, false);
+	write_window_state(toplevel->server);
 }
 
 static void update_background(struct polluxdesk_output *output) {
@@ -910,7 +1015,9 @@ static void focus_toplevel(struct polluxdesk_toplevel *toplevel) {
 	}
 
 	if (prev_surface == surface) {
-		/* Don't re-focus an already focused surface. */
+		/* Don't re-focus an already focused surface. Restoring a minimized
+		 * window lands here, so the state still has to be published. */
+		write_window_state(server);
 		return;
 	}
 	if (prev_surface) {
@@ -941,6 +1048,7 @@ static void focus_toplevel(struct polluxdesk_toplevel *toplevel) {
 		wlr_seat_keyboard_notify_enter(seat, surface,
 			keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
 	}
+	write_window_state(server);
 }
 
 static void keyboard_handle_modifiers(
@@ -1738,6 +1846,7 @@ static void xdg_toplevel_set_title(struct wl_listener *listener, void *data) {
 			output_box.x, output_box.y);
 	}
 	arrange_toplevel(toplevel);
+	write_window_state(toplevel->server);
 }
 
 static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
@@ -1767,6 +1876,7 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 
 	wl_list_insert(&toplevel->server->toplevels, &toplevel->link);
 	arrange_toplevel(toplevel);
+	write_window_state(toplevel->server);
 	focus_toplevel(toplevel);
 }
 
@@ -1799,6 +1909,7 @@ static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
 	 * second time, corrupting server->toplevels and crashing the compositor
 	 * when an app closes. Reinitialize the node immediately. */
 	wl_list_init(&toplevel->link);
+	write_window_state(toplevel->server);
 }
 
 static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
@@ -1880,6 +1991,9 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 		wl_list_remove(&toplevel->link);
 	}
 	wlr_scene_node_destroy(&toplevel->scene_tree->node);
+	/* After the node has left the list, so the walk above cannot reach it,
+	 * and before the free. */
+	write_window_state(toplevel->server);
 	free(toplevel);
 }
 
@@ -2328,6 +2442,14 @@ int main(int argc, char *argv[]) {
 	 * frame events at the refresh rate, and so on. */
 	wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s",
 			socket);
+
+	/* Publish an empty window list before anything can connect. The desktop
+	 * shell trusts the file only while the process named in it is alive, so
+	 * a compositor that starts and finds no windows has to say so -- else a
+	 * shell starting later would read the previous compositor's list and
+	 * draw running indicators for windows that no longer exist. */
+	write_window_state(&server);
+
 	wl_display_run(server.wl_display);
 
 
