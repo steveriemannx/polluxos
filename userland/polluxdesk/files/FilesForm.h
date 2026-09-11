@@ -35,6 +35,11 @@ public:
     /** Called after the window is created, for subclasses to do some initialization work */
     virtual void OnInitWindow() override;
 
+    /** Directory to open first.  Set before the window is created; empty (the
+     *  default) starts in the home directory, and a value that cannot be read
+     *  falls back there rather than leaving an empty window. */
+    void SetStartDir(const DString& dir) { m_startDir = dir; }
+
 private:
     /** One row of the directory listing. */
     struct Entry
@@ -50,7 +55,8 @@ private:
     void BuildFileList(ui::VBox* pRoot);
     void BuildStatusBar(ui::VBox* pRoot);
 
-    void Navigate(const DString& path);
+    /** @return false when the directory could not be listed. */
+    bool Navigate(const DString& path);
     void NavigateBack();
     void NavigateForward();
     void Refresh();
@@ -68,6 +74,7 @@ private:
     std::vector<DString> m_history;   // visited dirs; last = previous dir
     std::vector<DString> m_forward;   // dirs popped by NavigateBack
     DString m_curDir;
+    DString m_startDir;   // requested on the command line; may be empty
 
     ui::VScrollBox* m_pFileList = nullptr;
     ui::Label* m_pPathLabel = nullptr;

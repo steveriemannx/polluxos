@@ -107,8 +107,15 @@ void FilesForm::OnInitWindow()
 
     BaseClass::OnInitWindow();
 
-    Navigate(std::getenv("HOME") != nullptr ? DString(std::getenv("HOME"))
-                                            : DString(DUI_T("/")));
+    // Open where we were asked to, falling back rather than leaving the
+    // window empty: the dock asks for the trash, which does not exist until
+    // something has been thrown away.
+    if (m_startDir.empty() || !Navigate(m_startDir)) {
+        const char* home = std::getenv("HOME");
+        if (home == nullptr || !Navigate(DString(home))) {
+            Navigate(DUI_T("/"));
+        }
+    }
 }
 
 void FilesForm::BuildUi()
@@ -324,7 +331,7 @@ bool FilesForm::ListDirectory(const DString& dir, std::vector<Entry>& out)
     return true;
 }
 
-void FilesForm::Navigate(const DString& path)
+bool FilesForm::Navigate(const DString& path)
 {
     std::vector<Entry> entries;
     if (!ListDirectory(path, entries)) {
@@ -332,7 +339,7 @@ void FilesForm::Navigate(const DString& path)
             m_pStatusLabel->SetText(DUI_T("无法打开目录：") + path);
             m_pStatusLabel->SetAttribute(DUI_T("text_color"), DUI_T("#FFFF453A"));
         }
-        return;
+        return false;
     }
     if (!m_curDir.empty()) {
         m_history.push_back(m_curDir);
@@ -341,6 +348,7 @@ void FilesForm::Navigate(const DString& path)
     m_curDir = path;
     m_entries = std::move(entries);
     ReloadList();
+    return true;
 }
 
 void FilesForm::NavigateBack()
