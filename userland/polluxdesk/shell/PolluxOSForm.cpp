@@ -1,6 +1,7 @@
 #include "PolluxOSForm.h"
 #include "PolluxPaths.h"
 
+#include <algorithm>
 #include <ctime>
 #include <cstdio>
 #include <cstring>
@@ -24,6 +25,7 @@ const DString kMenuPanelLine= DUI_T("#33000000");
 const DString kMenuItemHot  = DUI_T("#330A84FF");
 const DString kDockBg       = DUI_T("#E6FFFFFF");   // frosted dock
 const DString kDockBorder   = DUI_T("#4DFFFFFF");
+const DString kDockSeparator= DUI_T("#33000000");   // hairline before the trash
 const DString kTextDark     = DUI_T("#FF1D1D1F");
 const DString kTextBody     = DUI_T("#FF3A3A3C");
 const DString kTextHint     = DUI_T("#FF8E8E93");
@@ -181,6 +183,7 @@ void PolluxOSForm::OnInitWindow()
     // The wlroots compositor owns every shadow and titlebar; the shell
     // surface itself must stay borderless and shadowless.
     SetShadowAttached(false);
+    m_settings = pollux::Load();
     BuildUi();
 
     BaseClass::OnInitWindow();
@@ -721,8 +724,146 @@ void PolluxOSForm::BuildDesktopArea(ui::VBox* pRoot)
     });
 }
 
+// dui takes a corner radius through two independent APIs that have to agree:
+// the state colours carry their own rounding, and border_round draws the
+// border. Setting one and not the other silently paints two different
+// corners, so every rounded control here goes through this helper.
+//
+// `interactive` covers the controls that also define hot/pushed states --
+// those states round separately and would otherwise square off on hover.
+static void SetRadius(ui::Control* pControl, int radius, bool interactive)
+{
+    const ui::UiSize size(radius, radius);
+    pControl->SetStateColorRound(ui::kControlStateNormal, size, false);
+    if (interactive) {
+        pControl->SetStateColorRound(ui::kControlStateHot, size, false);
+        pControl->SetStateColorRound(ui::kControlStatePushed, size, false);
+    }
+    pControl->SetAttribute(DUI_T("border_round"),
+        ui::StringUtil::Printf(DUI_T("%d,%d"), radius, radius));
+}
+
+// Layout attributes are strings; this keeps the derived sizes readable.
+static DString Num(int value)
+{
+    return ui::StringUtil::Printf(DUI_T("%d"), value);
+}
+
+// "left,top,right,bottom" with equal horizontal margins.
+static DString MarginH(int px)
+{
+    return ui::StringUtil::Printf(DUI_T("%d,0,%d,0"), px, px);
+}
+
+// The trash can, drawn out of dui primitives. The resource root is pinned to
+// dui's own resources, so an extra icon file cannot be added; the tile has to
+// be assembled from boxes the way the folder and document glyphs in the file
+// browser are.
+//
+// Its gradient is the one the Settings icon uses, so the two "system" tiles
+// read as a pair, with the can itself drawn light against it.
+static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
+{
+    // Every part is a fraction of the tile so the can scales with it.
+    const auto scale = [size](int num, int den) { return size * num / den; };
+
+    ui::ButtonVBox* pTile = new ui::ButtonVBox(pWindow);
+    pTile->SetAttribute(DUI_T("height"), Num(size));
+    pTile->SetAttribute(DUI_T("width"), Num(size));
+    pTile->SetBkColor(DUI_T("#FF9AA4B0"));
+    pTile->SetBkColor2(DUI_T("#FF6B7580"));
+    pTile->SetBkColor2Direction(DUI_T("1"));   // left -> right gradient
+    pTile->SetBorderColor(ui::kControlStateNormal, DUI_T("#FF6B7580"));
+    pTile->SetBorderColor(ui::kControlStateHot, kAccent);
+    pTile->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+    pTile->SetToolTipText(DUI_T("废纸篓"));
+    SetRadius(pTile, scale(14, 56), true);
+
+    // Two levels, because dui splits centring in a VBox between the layout
+    // and the child: child_align="vcenter" offsets the whole run of children
+    // vertically, but there is no horizontal equivalent -- each child has to
+    // carry its own halign. (A button also draws only its label text
+    // centred; children always start from the tile's corner.)
+    ui::VBox* pCan = new ui::VBox(pWindow);
+    pCan->SetAttribute(DUI_T("width"), Num(size));
+    pCan->SetAttribute(DUI_T("height"), Num(size));
+    pCan->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
+    pCan->SetMouseEnabled(false);
+    pTile->AddItem(pCan);
+
+    // Lid handle, lid, then the body: stacked vertically so the can grows
+    // from the top down as the icon size changes.
+    const int handleH = std::max(2, scale(3, 56));
+    const int lidH    = std::max(3, scale(4, 56));
+    const int bodyW   = scale(22, 56);
+    const int bodyH   = scale(26, 56);
+
+    ui::Control* pHandle = new ui::Control(pWindow);
+    pHandle->SetAttribute(DUI_T("halign"), DUI_T("center"));
+    pHandle->SetAttribute(DUI_T("width"), Num(scale(10, 56)));
+    pHandle->SetAttribute(DUI_T("height"), Num(handleH));
+    pHandle->SetBkColor(DUI_T("#FFF2F2F4"));
+    pHandle->SetMouseEnabled(false);
+    SetRadius(pHandle, std::max(1, handleH / 2), false);
+    pCan->AddItem(pHandle);
+
+    ui::Control* pLid = new ui::Control(pWindow);
+    pLid->SetAttribute(DUI_T("halign"), DUI_T("center"));
+    pLid->SetAttribute(DUI_T("width"), Num(scale(26, 56)));
+    pLid->SetAttribute(DUI_T("height"), Num(lidH));
+    pLid->SetBkColor(DUI_T("#FFFFFFFF"));
+    pLid->SetBorderColor(DUI_T("#FFB4B4BA"));
+    pLid->SetAttribute(DUI_T("border_size"), DUI_T("1"));
+    pLid->SetMouseEnabled(false);
+    SetRadius(pLid, std::max(1, lidH / 2), false);
+    pCan->AddItem(pLid);
+
+    ui::Control* pGap = new ui::Control(pWindow);
+    pGap->SetAttribute(DUI_T("halign"), DUI_T("center"));
+    pGap->SetAttribute(DUI_T("height"), Num(std::max(1, scale(2, 56))));
+    pGap->SetMouseEnabled(false);
+    pCan->AddItem(pGap);
+
+    // HBox so the three ribs stand upright.
+    ui::HBox* pBody = new ui::HBox(pWindow);
+    pBody->SetAttribute(DUI_T("halign"), DUI_T("center"));
+    pBody->SetAttribute(DUI_T("width"), Num(bodyW));
+    pBody->SetAttribute(DUI_T("height"), Num(bodyH));
+    pBody->SetBkColor(DUI_T("#FFF4F4F6"));
+    pBody->SetBkColor2(DUI_T("#FFD6D6DC"));
+    pBody->SetBkColor2Direction(DUI_T("1"));
+    pBody->SetBorderColor(DUI_T("#FFB4B4BA"));
+    pBody->SetAttribute(DUI_T("border_size"), DUI_T("1"));
+    pBody->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
+    pBody->SetMouseEnabled(false);
+    SetRadius(pBody, std::max(2, scale(4, 56)), false);
+
+    for (int i = 0; i < 3; ++i) {
+        ui::Control* pRib = new ui::Control(pWindow);
+        pRib->SetAttribute(DUI_T("width"), DUI_T("1"));
+        pRib->SetAttribute(DUI_T("height"), Num(std::max(4, bodyH - scale(8, 56))));
+        pRib->SetAttribute(DUI_T("margin"), MarginH(std::max(1, scale(2, 56))));
+        pRib->SetBkColor(DUI_T("#FFB4B4BA"));
+        pRib->SetMouseEnabled(false);
+        pBody->AddItem(pRib);
+    }
+    pCan->AddItem(pBody);
+
+    return pTile;
+}
+
 void PolluxOSForm::BuildDock(ui::VBox* pRoot)
 {
+    // Everything is derived from the configured icon size so the bar, the
+    // tiles and their corners stay in proportion; the divisors are chosen so
+    // the 56px default reproduces the original hard-coded design.
+    const int iconPx     = pollux::DockIconPx(m_settings);
+    const int barHeight  = iconPx + 20;        // 76 at the default
+    const int barRadius  = iconPx * 18 / 56;   // 18
+    const int iconGap    = iconPx * 4 / 56;    // 4
+    const int iconRadius = iconPx * 14 / 56;   // 14
+    const int svgSize    = iconPx * 48 / 56;   // 48
+
     // macOS-style centered translucent icon dock (no labels, like the real
     // Dock). The dock is wrapped in a full-width HBox with
     // child_align="hcenter,vcenter": that reliably centers the auto-width
@@ -734,15 +875,14 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
     pRoot->AddItem(pDockRow);
 
     ui::HBox* pDock = new ui::HBox(this);
-    pDock->SetAttribute(DUI_T("height"), DUI_T("76"));
+    pDock->SetAttribute(DUI_T("height"), Num(barHeight));
     pDock->SetAttribute(DUI_T("width"), DUI_T("auto"));
     pDock->SetAttribute(DUI_T("padding"), DUI_T("6,6,6,6"));
     pDock->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
     pDock->SetBkColor(kDockBg);
     pDock->SetBorderColor(kDockBorder);
     pDock->SetAttribute(DUI_T("border_size"), DUI_T("1"));
-    pDock->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(18, 18), false);
-    pDock->SetAttribute(DUI_T("border_round"), DUI_T("18,18"));
+    SetRadius(pDock, barRadius, false);
     pDockRow->AddItem(pDock);
 
     const int kDockCount = static_cast<int>(sizeof(kDockApps) / sizeof(kDockApps[0]));
@@ -753,21 +893,19 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
         if (kDockApps[i].icon != nullptr) {
             pIcon->SetText(DUI_T(""));
             pIcon->SetBkImage(DString(DUI_T("file='")) + kDockApps[i].icon +
-                              DUI_T("' width='48' height='48' halign='center' valign='center'"));
+                              DUI_T("' width='") + Num(svgSize) + DUI_T("' height='") +
+                              Num(svgSize) + DUI_T("' halign='center' valign='center'"));
         }
         pIcon->SetAttribute(DUI_T("font"), DUI_T("system_bold_22"));
         pIcon->SetAttribute(DUI_T("text_color"), DUI_T("#FFFFFFFF"));
         pIcon->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
-        pIcon->SetAttribute(DUI_T("height"), DUI_T("56"));
-        pIcon->SetAttribute(DUI_T("width"), DUI_T("56"));
-        pIcon->SetAttribute(DUI_T("margin"), DUI_T("4,0,4,0"));
+        pIcon->SetAttribute(DUI_T("height"), Num(iconPx));
+        pIcon->SetAttribute(DUI_T("width"), Num(iconPx));
+        pIcon->SetAttribute(DUI_T("margin"), MarginH(iconGap));
         pIcon->SetBkColor(DString(kDockApps[i].color));
         pIcon->SetBkColor2(DString(kDockApps[i].color2));
         pIcon->SetBkColor2Direction(DUI_T("1"));   // left -> right gradient
-        pIcon->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(14, 14), false);
-        pIcon->SetStateColorRound(ui::kControlStateHot, ui::UiSize(14, 14), false);
-        pIcon->SetStateColorRound(ui::kControlStatePushed, ui::UiSize(14, 14), false);
-        pIcon->SetAttribute(DUI_T("border_round"), DUI_T("14,14"));
+        SetRadius(pIcon, iconRadius, true);
         pIcon->SetBorderColor(ui::kControlStateNormal, DString(kDockApps[i].color2));
         pIcon->SetBorderColor(ui::kControlStateHot, kAccent);
         pIcon->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
@@ -783,6 +921,30 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
         });
         pDock->AddItem(pIcon);
     }
+
+    // Right-hand side, inside the bar exactly as macOS has it: a hairline,
+    // then the trash. The bar is centered by its full contents, so adding
+    // these shifts the whole row half their width to the left -- which is
+    // what the real Dock does too.
+    ui::Control* pSeparator = new ui::Control(this);
+    pSeparator->SetAttribute(DUI_T("width"), DUI_T("1"));
+    pSeparator->SetAttribute(DUI_T("height"), Num(iconPx * 62 / 100));
+    pSeparator->SetAttribute(DUI_T("margin"), DUI_T("7,0,7,0"));
+    pSeparator->SetBkColor(kDockSeparator);
+    pSeparator->SetMouseEnabled(false);
+    pDock->AddItem(pSeparator);
+
+    ui::ButtonVBox* pTrash = MakeTrashTile(this, iconPx);
+    pTrash->SetAttribute(DUI_T("margin"), MarginH(iconGap));
+    pTrash->AttachClick([this](const ui::EventArgs& /*args*/) {
+        HideMenuPanel();
+        // The trash is an ordinary directory; the browser is simply pointed
+        // at it. mkdir first so the very first open works on a fresh account.
+        LaunchApp("mkdir -p \"$HOME/.Trash\"; exec " POLLUX_BIN
+                  "/polluxdesk_files \"$HOME/.Trash\"");
+        return true;
+    });
+    pDock->AddItem(pTrash);
 }
 
 void PolluxOSForm::StartClock()

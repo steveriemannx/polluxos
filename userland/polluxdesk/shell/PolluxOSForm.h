@@ -4,6 +4,8 @@
 // dui
 #include "dui/dui.h"
 
+#include "PolluxSettings.h"
+
 #include <memory>
 
 class LaunchPadForm;
@@ -113,6 +115,11 @@ private:
 
     LaunchPadForm* m_pLaunchPad = nullptr;   // overlay app-grid window
     std::weak_ptr<ui::WeakFlag> m_launchPadWeak;  // lifetime of m_pLaunchPad
+
+    // Read from disk and reloaded when the settings file changes; the dock,
+    // the menus and everything else that follows the appearance read it here
+    // rather than re-reading the file per control.
+    pollux::Settings m_settings;
 
     ui::Label* m_pClockLabel = nullptr;
     ui::Label* m_pDesktopClockLabel = nullptr;
