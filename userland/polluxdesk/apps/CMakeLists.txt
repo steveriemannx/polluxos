@@ -9,4 +9,7 @@ get_filename_component(DUI_SRC_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/../../dui/" A
 
 set(EMBED_RES_DIR "${DUI_ROOT}/resources")
 include("${DUI_SRC_ROOT_DIR}/cmake/dui_embed_res.cmake")
+# PolluxOS headers shared by the components (PolluxPaths.h, ...).
+include_directories("${CMAKE_CURRENT_LIST_DIR}/../common")
+
 include("${DUI_SRC_ROOT_DIR}/cmake/dui_bin.cmake")

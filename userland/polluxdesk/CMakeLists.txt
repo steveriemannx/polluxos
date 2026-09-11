@@ -17,18 +17,19 @@ get_filename_component(DUI_SRC_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/../dui/" ABSO
 # here. dui's own cmake skips regeneration when libskia.a is already present.
 set(_pd_dui_build "${CMAKE_CURRENT_LIST_DIR}/../../build/dui")
 set(DUI_BUILD_SKIA_FROM_SOURCE OFF CACHE BOOL "" FORCE)
-set(DUI_SKIA_LIB_PATH "${CMAKE_BINARY_DIR}/lib/release" CACHE PATH "" FORCE)
-set(DUI_SKIA_LIB_PATH_RELEASE "${CMAKE_BINARY_DIR}/lib/release" CACHE PATH "" FORCE)
+set(DUI_SKIA_LIB_PATH "${_pd_dui_build}/lib/release" CACHE PATH "" FORCE)
+set(DUI_SKIA_LIB_PATH_RELEASE "${_pd_dui_build}/lib/release" CACHE PATH "" FORCE)
 
 include("${DUI_SRC_ROOT_DIR}/cmake/dui_common.cmake")
 
+# Point straight at the dui build tree's libraries instead of copying or
+# symlinking them into this one: nothing here regenerates Skia anyway, and a
+# link into our own tree would have to be redone whenever a path changes.
 if(NOT EXISTS "${DUI_SKIA_LIB_PATH_RELEASE}/libskia.a")
-    file(MAKE_DIRECTORY "${DUI_SKIA_LIB_PATH_RELEASE}")
-    file(GLOB _pd_skia "${_pd_dui_build}/lib/release/*")
-    foreach(_f IN LISTS _pd_skia)
-        get_filename_component(_n "${_f}" NAME)
-        execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink "${_f}" "${DUI_SKIA_LIB_PATH_RELEASE}/${_n}")
-    endforeach()
+    message(FATAL_ERROR
+        "Skia was not found at ${DUI_SKIA_LIB_PATH_RELEASE}.\n"
+        "Build dui first (it is the tree that builds Skia), or point "
+        "DUI_BUILD_DIR at a dui build tree that has lib/release/libskia.a.")
 endif()
 
 # `dui` itself is already built in the dui tree; this tree builds only the

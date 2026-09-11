@@ -1,4 +1,5 @@
 #include "LaunchPadForm.h"
+#include "PolluxPaths.h"
 
 #include <cstdio>
 #include <cstring>
@@ -332,7 +333,7 @@ void LaunchPadForm::ScanDesktopApps(std::vector<DesktopApp>& apps)
     // Keep the native settings application visible in Apps on a fresh system.
     if (home != nullptr) {
         DString settingsExec = DString("\"") + home +
-            DUI_T("/projects-main/polluxos-main/build/polluxdesk/bin/polluxdesk_settings\"");
+            DUI_T("\"" POLLUX_BIN "/polluxdesk_settings\"");
         apps.push_back({ DUI_T("屏幕与外观"), settingsExec, DUI_T("polluxdesk/icons/settings.svg") });
     }
     std::sort(apps.begin(), apps.end(),

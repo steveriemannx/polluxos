@@ -1,4 +1,5 @@
 #include "PolluxOSForm.h"
+#include "PolluxPaths.h"
 
 #include <ctime>
 #include <cstdio>
@@ -43,7 +44,7 @@ const DString kMenuButtonText[kMenuButtonCount] = {
 // ---------------------------------------------------------------------------
 const PolluxOSForm::MenuItem PolluxOSForm::kAppMenu[] = {
     { "关于 PolluxOS",  "wayst -e sh -c 'echo \"PolluxOS (dui shell + wlroots compositor)\"; echo \"FreeBSD / Wayland / macOS style\"; read _'", false, true },
-    { "系统设置",       "wayst -e sh -c 'cat \"$HOME/projects-main/dui/examples/polluxdesk_compositor/README.md\"; echo; echo \"按回车关闭\"; read _'", false, true },
+    { "系统设置",       "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_settings\"", false, true },
     { "键盘快捷键",     nullptr, false, false },
     { nullptr,          nullptr, true, false },
     { "锁定屏幕",       nullptr, false, false },
@@ -55,9 +56,9 @@ const PolluxOSForm::MenuItem PolluxOSForm::kAppMenu[] = {
 const PolluxOSForm::MenuItem PolluxOSForm::kFileMenu[] = {
     { "新建终端",       "wayst", false, true },
     { "新建编辑器",     "wayst -e vim", false, true },
-    { "文件管理器",     "\"$HOME/projects-main/polluxos-main/build/polluxdesk/bin/polluxdesk_files\" 2>/dev/null || wayst -e sh -c 'echo 未安装 polluxdesk_files; read _'", false, true },
+    { "文件管理器",     "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_files\" 2>/dev/null || wayst -e sh -c 'echo 未安装 polluxdesk_files; read _'", false, true },
     { "主目录",         "wayst -e sh -c 'cd \"$HOME\" && exec bash'", false, true },
-    { "项目目录",       "wayst -e sh -c 'cd \"$HOME/projects-main/dui\" && exec bash'", false, true },
+    { "项目目录",       "wayst -e sh -c 'cd \"$HOME/projects-main/polluxos\" && exec bash'", false, true },
     { nullptr,          nullptr, true, false },
     { "关闭窗口",       nullptr, false, false },
 };
@@ -81,7 +82,7 @@ const PolluxOSForm::MenuItem PolluxOSForm::kViewMenu[] = {
 
 const PolluxOSForm::MenuItem PolluxOSForm::kGoMenu[] = {
     { "主目录",         "wayst -e sh -c 'cd \"$HOME\" && exec bash'", false, true },
-    { "项目目录",       "wayst -e sh -c 'cd \"$HOME/projects-main/dui\" && exec bash'", false, true },
+    { "项目目录",       "wayst -e sh -c 'cd \"$HOME/projects-main/polluxos\" && exec bash'", false, true },
 };
 
 const PolluxOSForm::MenuItem PolluxOSForm::kWindowMenu[] = {
@@ -112,7 +113,7 @@ const int PolluxOSForm::kMenuBarMenuCounts[] = {
 const PolluxOSForm::MenuItem PolluxOSForm::kQuickMenu[] = {
     { "新建终端",       "wayst", false, true },
     { "应用菜单",       "wayst -e sh -c 'ls /usr/local/share/applications \"$HOME/.local/share/applications\" 2>/dev/null | sed s/.desktop// | head -40; read _'", false, true },
-    { "系统设置",       "wayst -e sh -c 'cat \"$HOME/projects-main/dui/examples/polluxdesk_compositor/README.md\"; echo; echo \"按回车关闭\"; read _'", false, true },
+    { "系统设置",       "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_settings\"", false, true },
     { nullptr,          nullptr, true, false },
     { "退出登录",       "/home/shxu/.local/bin/session-logout", false, true },
 };
@@ -127,9 +128,9 @@ const int PolluxOSForm::kQuickMenuCount =
 const PolluxOSForm::DockApp PolluxOSForm::kDockApps[] = {
     { "终端",   ">_",  "polluxdesk/icons/terminal.svg", "#FF4C9FDB", "#FF2E6FA3", "wayst" },
     { "启动台", "⊞",   "polluxdesk/icons/apps.svg", "#FF8E7CC3", "#FF5F4B8B", "" },
-    { "文件",   "~",   "polluxdesk/icons/files.svg", "#FFF0A35C", "#FFC97A2B", "\"$HOME/projects-main/polluxos-main/build/polluxdesk/bin/polluxdesk_files\" 2>/dev/null || wayst -e sh -c 'echo 未安装 polluxdesk_files; read _'" },
+    { "文件",   "~",   "polluxdesk/icons/files.svg", "#FFF0A35C", "#FFC97A2B", "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_files\" 2>/dev/null || wayst -e sh -c 'echo 未安装 polluxdesk_files; read _'" },
     { "浏览器", "@",   "polluxdesk/icons/browser.svg", "#FF5AA9E6", "#FF2F6FAB", "wayst -e sh -c 'firefox 2>/dev/null || chromium 2>/dev/null || (echo \"未安装浏览器\"; sleep 2)'" },
-    { "设置",   "*",   "polluxdesk/icons/settings.svg", "#FF9AA4B0", "#FF6B7580", "\"$HOME/projects-main/polluxos-main/build/polluxdesk/bin/polluxdesk_settings\"" },
+    { "设置",   "*",   "polluxdesk/icons/settings.svg", "#FF9AA4B0", "#FF6B7580", "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_settings\"" },
 };
 
 PolluxOSForm::PolluxOSForm()
@@ -204,7 +205,7 @@ void PolluxOSForm::LaunchApp(const char* cmdline)
     if (std::strcmp(cmdline, "/home/shxu/.local/bin/session-logout") == 0) {
         const char* home = std::getenv("HOME");
         DString launcher = DString(home != nullptr ? home : "/home/shxu") +
-                           DUI_T("/projects-main/polluxos-main/build/polluxdesk/bin/launcher_code");
+                           DUI_T("/projects-main/polluxos/build/polluxdesk/bin/launcher_code");
         pid_t pid = fork();
         if (pid < 0) {
             perror("[polluxdesk] logout fork");
@@ -247,7 +248,7 @@ void PolluxOSForm::ShowLaunchPad()
     // Run Apps as a separate Wayland client. dui's input routing is reliable
     // for one window per process; the old second-window implementation made
     // the panel's clicks, wheel and keyboard events disappear.
-    LaunchApp("\"$HOME/projects-main/polluxos-main/build/polluxdesk/bin/polluxdesk_apps\"");
+    LaunchApp("\"" POLLUX_BIN "/polluxdesk_apps\"");
 }
 
 void PolluxOSForm::HideAppPanel()
@@ -690,7 +691,7 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     controlCenter->SetAttribute(DUI_T("border_round"), DUI_T("5,5"));
     controlCenter->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
     controlCenter->AttachClick([this](const ui::EventArgs&) {
-        LaunchApp("\"$HOME/projects-main/polluxos-main/build/polluxdesk/bin/polluxdesk_settings\"");
+        LaunchApp("\"" POLLUX_BIN "/polluxdesk_settings\"");
         return true;
     });
     pTopBar->AddItem(controlCenter);
