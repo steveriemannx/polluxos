@@ -8,8 +8,8 @@ dui talks to the display stack directly via its **native Wayland backend**
 (`-DDUI_ENABLE_WAYLAND=ON -DDUI_ENABLE_SDL=OFF`); SDL is deliberately not used.
 
 Boot flow: kernel (vt/efifb or DRM) → init → Wayland compositor (weston/sway) →
-**stardesk**, the dui-based desktop shell (taskbar/launcher, XML layouts under
-`userland/stardesk/ui/`).
+**polluxdesk**, the dui-based desktop shell (taskbar/launcher, XML layouts under
+`userland/polluxdesk/ui/`).
 
 The build produces a **dd-able UEFI image** (`build/polluxos.img`, GPT:
 FAT EFI partition with loader.efi + UFS2 rootfs). No installer yet.
@@ -20,13 +20,13 @@ FAT EFI partition with loader.efi + UFS2 rootfs). No installer yet.
 | :--- | :--- | :--- |
 | `base/freebsd-src/` (submodule) | **bmake** | `make buildworld/buildkernel`, KERNCONF, src.conf |
 | `userland/dui/` (submodule, URL TBD) | **CMake** | Wayland backend enabled, SDL disabled |
-| `userland/stardesk/` | **CMake** | Links against installed dui under `build/prefix` |
+| `userland/polluxdesk/` | **CMake** | Links against installed dui under `build/prefix` |
 | top-level `Makefile` | plain make | Orchestration only; never reimplements the above |
 
 ## Key commands
 
 ```sh
-make               # full chain: world → kernel → dui → stardesk → polluxos.img
+make               # full chain: world → kernel → dui → polluxdesk → polluxos.img
 make world         # buildworld (+ injects KERNCONF, applies patches)
 make kernel        # buildkernel KERNCONF=POLLUXOS
 make dui           # cmake configure/build/install dui into build/prefix
@@ -64,7 +64,7 @@ base/freebsd-src/   FreeBSD stable/15 (submodule, bmake)
 config/             KERNCONF/POLLUXOS, src.conf, make.conf, rc.conf (build/runtime config)
 patches/            base patches (git format-patch) + README
 userland/dui/       dui submodule (URL TBD — not added yet; fetch.sh tolerates its absence)
-userland/stardesk/  desktop shell: CMakeLists.txt, main.cpp, ui/shell.xml
+userland/polluxdesk/  desktop shell: CMakeLists.txt, main.cpp, ui/shell.xml
 overlay/            files copied verbatim into the rootfs
 scripts/            fetch.sh, apply-patches.sh, build.sh, mkimage.sh, run-qemu.sh
 ```
@@ -73,6 +73,6 @@ scripts/            fetch.sh, apply-patches.sh, build.sh, mkimage.sh, run-qemu.s
 
 - dui submodule: **pending** — user must supply the repo URL, then
   `git submodule add <url> userland/dui`
-- stardesk: placeholder main.cpp; real taskbar/launcher UI not written yet
+- polluxdesk: placeholder main.cpp; real taskbar/launcher UI not written yet
 - compositor choice (weston vs sway) undecided; `config/rc.conf` has commented templates
 - installer: none; dd-able image only (image-side only; plan: bsdinstall-based later)

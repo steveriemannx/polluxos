@@ -39,18 +39,18 @@ env MAKEOBJDIRPREFIX="$OBJPREFIX" \
 env MAKEOBJDIRPREFIX="$OBJPREFIX" \
     make -C "$BASE" installkernel DESTDIR="$DESTDIR" KERNCONF="$KERNCONF"
 
-# 3. dui + stardesk (cmake)，安装到统一 PREFIX/前缀树
+# 3. dui + polluxdesk (cmake)，安装到统一 PREFIX/前缀树
 cmake -S userland/dui -B "$BUILD/dui" \
     -DCMAKE_BUILD_TYPE=Release \
     -DDUI_ENABLE_WAYLAND=ON -DDUI_ENABLE_SDL=OFF
 cmake --build "$BUILD/dui" -j "$JOBS"
 cmake --install "$BUILD/dui" --prefix "$PREFIX"
 
-cmake -S userland/stardesk -B "$BUILD/stardesk" \
+cmake -S userland/polluxdesk -B "$BUILD/polluxdesk" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_PREFIX_PATH="$PREFIX" -DDUI_ROOT="$PREFIX"
-cmake --build "$BUILD/stardesk" -j "$JOBS"
-cmake --install "$BUILD/stardesk" --prefix "$PREFIX"
+cmake --build "$BUILD/polluxdesk" -j "$JOBS"
+cmake --install "$BUILD/polluxdesk" --prefix "$PREFIX"
 
 # 4. 根目录组装 + 镜像
 sh scripts/mkimage.sh

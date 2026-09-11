@@ -1,0 +1,833 @@
+#include "PolluxOSForm.h"
+
+#include <ctime>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <csignal>
+#include <unistd.h>
+
+namespace {
+
+// ---------------------------------------------------------------------------
+// macOS Big Sur / Sonoma light palette.
+// 8-digit ARGB: translucent menu bar / dock keep the wallpaper visible behind
+// them, so they read as "frosted glass" instead of flat gray bars.
+// ---------------------------------------------------------------------------
+const DString kBarBg        = _T("#F2FFFFFF");   // frosted menu bar
+const DString kBarBorder    = _T("#33000000");   // hairline under menu bar
+const DString kTransparent  = _T("#00000000");
+const DString kBarHot       = _T("#220A84FF");
+const DString kMenuPanelBg  = _T("#F5FFFFFF");   // frosted dropdown panel
+const DString kMenuPanelLine= _T("#33000000");
+const DString kMenuItemHot  = _T("#330A84FF");
+const DString kDockBg       = _T("#E6FFFFFF");   // frosted dock
+const DString kDockBorder   = _T("#4DFFFFFF");
+const DString kTextDark     = _T("#FF1D1D1F");
+const DString kTextBody     = _T("#FF3A3A3C");
+const DString kTextHint     = _T("#FF8E8E93");
+const DString kAccent       = _T("#FF0A84FF");
+const DString kDanger       = _T("#FFFF453A");
+
+// Number of fixed menu buttons: 文件 / 编辑 / 显示 / 前往 / 窗口 / 帮助.
+const int kMenuButtonCount = 6;
+const DString kMenuButtonText[kMenuButtonCount] = {
+    _T("文件"), _T("编辑"), _T("显示"), _T("前往"), _T("窗口"), _T("帮助")
+};
+
+} // namespace
+
+// ---------------------------------------------------------------------------
+// Menu bar entries. Disabled items (cmd == nullptr, enabled == false) are
+// rendered grayed-out like their macOS counterparts; separators are hairlines.
+// ---------------------------------------------------------------------------
+const PolluxOSForm::MenuItem PolluxOSForm::kAppMenu[] = {
+    { "关于 PolluxOS",  "wayst -e sh -c 'echo \"PolluxOS (dui shell + wlroots compositor)\"; echo \"FreeBSD / Wayland / macOS style\"; read _'", false, true },
+    { "系统设置",       "wayst -e sh -c 'cat \"$HOME/projects-main/dui/examples/polluxdesk_compositor/README.md\"; echo; echo \"按回车关闭\"; read _'", false, true },
+    { "键盘快捷键",     nullptr, false, false },
+    { nullptr,          nullptr, true, false },
+    { "锁定屏幕",       nullptr, false, false },
+    { "退出登录",       "/home/shxu/.local/bin/session-logout", false, true },
+    { "重新启动",       "shutdown -r now", false, true },
+    { "关机",           "shutdown -p now", false, true },
+};
+
+const PolluxOSForm::MenuItem PolluxOSForm::kFileMenu[] = {
+    { "新建终端",       "wayst", false, true },
+    { "新建编辑器",     "wayst -e vim", false, true },
+    { "文件管理器",     "\"$HOME/projects-main/dui/bin/polluxdesk_files\" 2>/dev/null || wayst -e sh -c 'echo 未安装 polluxdesk_files; read _'", false, true },
+    { "主目录",         "wayst -e sh -c 'cd \"$HOME\" && exec bash'", false, true },
+    { "项目目录",       "wayst -e sh -c 'cd \"$HOME/projects-main/dui\" && exec bash'", false, true },
+    { nullptr,          nullptr, true, false },
+    { "关闭窗口",       nullptr, false, false },
+};
+
+const PolluxOSForm::MenuItem PolluxOSForm::kEditMenu[] = {
+    { "剪切",           nullptr, false, false },
+    { "复制",           nullptr, false, false },
+    { "粘贴",           nullptr, false, false },
+    { nullptr,          nullptr, true, false },
+    { "全选",           nullptr, false, false },
+};
+
+const PolluxOSForm::MenuItem PolluxOSForm::kViewMenu[] = {
+    /* Window geometry is now handled by the compositor titlebar buttons
+     * (green = fullscreen, titlebar drag = move). */
+    { "切换全屏",       nullptr, false, false },
+    { "切换浮动窗口",   nullptr, false, false },
+    { "水平分屏",       nullptr, false, false },
+    { "垂直分屏",       nullptr, false, false },
+};
+
+const PolluxOSForm::MenuItem PolluxOSForm::kGoMenu[] = {
+    { "主目录",         "wayst -e sh -c 'cd \"$HOME\" && exec bash'", false, true },
+    { "项目目录",       "wayst -e sh -c 'cd \"$HOME/projects-main/dui\" && exec bash'", false, true },
+};
+
+const PolluxOSForm::MenuItem PolluxOSForm::kWindowMenu[] = {
+    { "最小化",         nullptr, false, false },
+    { "最大化",         nullptr, false, false },
+    { "关闭窗口",       nullptr, false, false },
+};
+
+const PolluxOSForm::MenuItem PolluxOSForm::kHelpMenu[] = {
+    { "PolluxOS 说明",  "wayst -e sh -c 'cat \"$HOME/projects-main/dui/README.md\"; echo; echo \"按回车关闭\"; read _'", false, true },
+    { "dui 文档",       "wayst -e sh -c 'cat \"$HOME/projects-main/dui/docs/Summary.md\"; echo; echo \"按回车关闭\"; read _'", false, true },
+};
+
+const PolluxOSForm::MenuItem* PolluxOSForm::kMenuBarMenus[] = {
+    kAppMenu, kFileMenu, kEditMenu, kViewMenu, kGoMenu, kWindowMenu, kHelpMenu,
+};
+
+const int PolluxOSForm::kMenuBarMenuCounts[] = {
+    static_cast<int>(sizeof(kAppMenu) / sizeof(kAppMenu[0])),
+    static_cast<int>(sizeof(kFileMenu) / sizeof(kFileMenu[0])),
+    static_cast<int>(sizeof(kEditMenu) / sizeof(kEditMenu[0])),
+    static_cast<int>(sizeof(kViewMenu) / sizeof(kViewMenu[0])),
+    static_cast<int>(sizeof(kGoMenu) / sizeof(kGoMenu[0])),
+    static_cast<int>(sizeof(kWindowMenu) / sizeof(kWindowMenu[0])),
+    static_cast<int>(sizeof(kHelpMenu) / sizeof(kHelpMenu[0])),
+};
+
+const PolluxOSForm::MenuItem PolluxOSForm::kQuickMenu[] = {
+    { "新建终端",       "wayst", false, true },
+    { "应用菜单",       "wayst -e sh -c 'ls /usr/local/share/applications \"$HOME/.local/share/applications\" 2>/dev/null | sed s/.desktop// | head -40; read _'", false, true },
+    { "系统设置",       "wayst -e sh -c 'cat \"$HOME/projects-main/dui/examples/polluxdesk_compositor/README.md\"; echo; echo \"按回车关闭\"; read _'", false, true },
+    { nullptr,          nullptr, true, false },
+    { "退出登录",       "/home/shxu/.local/bin/session-logout", false, true },
+};
+
+const int PolluxOSForm::kQuickMenuCount =
+    static_cast<int>(sizeof(kQuickMenu) / sizeof(kQuickMenu[0]));
+
+// Dock launchers: macOS-style colored app tiles (wayst / vim available
+// on the FreeBSD test host); everything is launched with fork/exec via /bin/sh.
+// Like macOS, the dock shows icons only - names are tooltips.
+// An empty `cmd` is the Launchpad tile: clicking opens the in-shell app grid.
+const PolluxOSForm::DockApp PolluxOSForm::kDockApps[] = {
+    { "终端",   ">_",  "polluxdesk/icons/terminal.svg", "#FF4C9FDB", "#FF2E6FA3", "wayst" },
+    { "启动台", "⊞",   "polluxdesk/icons/apps.svg", "#FF8E7CC3", "#FF5F4B8B", "" },
+    { "文件",   "~",   "polluxdesk/icons/files.svg", "#FFF0A35C", "#FFC97A2B", "\"$HOME/projects-main/dui/bin/polluxdesk_files\" 2>/dev/null || wayst -e sh -c 'echo 未安装 polluxdesk_files; read _'" },
+    { "浏览器", "@",   "polluxdesk/icons/browser.svg", "#FF5AA9E6", "#FF2F6FAB", "wayst -e sh -c 'firefox 2>/dev/null || chromium 2>/dev/null || (echo \"未安装浏览器\"; sleep 2)'" },
+    { "设置",   "*",   "polluxdesk/icons/settings.svg", "#FF9AA4B0", "#FF6B7580", "\"$HOME/projects-main/dui/bin/polluxdesk_settings\"" },
+};
+
+PolluxOSForm::PolluxOSForm()
+{
+    // Dock-launched apps are forked and never waited on; ignore SIGCHLD so
+    // exited children are auto-reaped instead of accumulating as zombies.
+    signal(SIGCHLD, SIG_IGN);
+}
+
+PolluxOSForm::~PolluxOSForm()
+{
+    if (m_clockTimerId > 0) {
+        ui::GlobalManager::Instance().Timer().RemoveTimer(m_clockTimerId);
+        m_clockTimerId = 0;
+    }
+}
+
+DString PolluxOSForm::GetSkinFolder()
+{
+    return _T("");
+}
+
+DString PolluxOSForm::GetSkinFile()
+{
+    // Pure code mode: no layout XML is loaded
+    return _T("");
+}
+
+void PolluxOSForm::GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs)
+{
+    attrs.m_bInitSizeDefined = true;
+    attrs.m_szInitSize.cx = 1280;
+    attrs.m_szInitSize.cy = 800;
+    attrs.m_bShadowAttached = false;
+    attrs.m_bShadowAttachedDefined = true;
+    attrs.m_bIsLayeredWindow = true;
+    attrs.m_bIsLayeredWindowDefined = true;
+    // No caption / resize border: a bare fullscreen desktop shell.
+    attrs.m_rcCaption = ui::UiRect(0, 0, 0, 0);
+    attrs.m_bCaptionDefined = true;
+    attrs.m_rcSizeBox = ui::UiRect(0, 0, 0, 0);
+    attrs.m_bSizeBoxDefined = true;
+    BaseClass::GetCreateWindowAttributes(attrs);
+}
+
+void PolluxOSForm::OnInitWindow()
+{
+    // The wlroots compositor owns every shadow and titlebar; the shell
+    // surface itself must stay borderless and shadowless.
+    SetShadowAttached(false);
+    BuildUi();
+
+    BaseClass::OnInitWindow();
+
+    // The shell fills the workspace as the single tiled window; apps launched
+    // from the dock float above it (see the compositor titlebar management).
+    // Deliberately NOT fullscreen: a fullscreen window would cover the apps.
+    StartClock();
+}
+
+void PolluxOSForm::LaunchApp(const char* cmdline)
+{
+    if (cmdline == nullptr || cmdline[0] == '\0') {
+        return;
+    }
+    printf("[polluxdesk] launch: %s\n", cmdline);
+    fflush(stdout);
+
+    // Logout swaps the shell client under the SAME compositor: start the
+    // greeter first, then close this window. The greeter wrapper switches to
+    // the new client, so the DRM output is never torn down (no flicker).
+    if (std::strcmp(cmdline, "/home/shxu/.local/bin/session-logout") == 0) {
+        const char* home = std::getenv("HOME");
+        DString launcher = DString(home != nullptr ? home : "/home/shxu") +
+                           _T("/projects-main/dui/bin/launcher_code");
+        pid_t pid = fork();
+        if (pid < 0) {
+            perror("[polluxdesk] logout fork");
+            return;
+        }
+        if (pid == 0) {
+            setsid();
+            execl(launcher.c_str(), "launcher_code", static_cast<char*>(nullptr));
+            perror("[polluxdesk] logout exec launcher_code");
+            _exit(127);
+        }
+        CloseWnd(ui::kWindowCloseNormal);
+        return;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("[polluxdesk] fork");
+        return;
+    }
+    if (pid == 0) {
+        setsid();
+        execl("/bin/sh", "sh", "-c", cmdline, static_cast<char*>(nullptr));
+        perror("[polluxdesk] execl");
+        _exit(127);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Launchpad: a separate always-on-top overlay window (LaunchPadForm) titled
+// "PolluxOS Launchpad". The compositor keeps that title centered, borderless
+// and pinned above regular app windows, so the grid is never buried under
+// terminals like the old in-shell panel was.
+// ---------------------------------------------------------------------------
+
+#include "LaunchPadForm.h"
+
+void PolluxOSForm::ShowLaunchPad()
+{
+    // Run Apps as a separate Wayland client. dui's input routing is reliable
+    // for one window per process; the old second-window implementation made
+    // the panel's clicks, wheel and keyboard events disappear.
+    LaunchApp("\"$HOME/projects-main/dui/bin/polluxdesk_apps\"");
+}
+
+void PolluxOSForm::HideAppPanel()
+{
+    if (!m_launchPadWeak.expired() && m_pLaunchPad != nullptr) {
+        m_pLaunchPad->HidePad();
+    }
+}
+
+bool PolluxOSForm::IsAppPanelVisible() const
+{
+    return !m_launchPadWeak.expired() && m_pLaunchPad->IsWindowVisible();
+}
+
+void PolluxOSForm::SetMenuButtonActive(int index, bool active)
+{
+    if (index < 0 || index >= kMenuButtonCount || m_menuButtons[index] == nullptr) {
+        return;
+    }
+    m_menuButtons[index]->SetStateColor(ui::kControlStateNormal,
+                                        active ? kBarHot : kTransparent);
+}
+
+void PolluxOSForm::HideMenuPanel()
+{
+    // Any menu interaction replaces the Launchpad overlay as well.
+    HideAppPanel();
+    if (m_pMenuPanel != nullptr) {
+        // Capture the panel rect before hiding it. On the Wayland backend,
+        // simply SetVisible(false) may not damage the previously painted
+        // dropdown area; invalidating the full client guarantees the wallpaper /
+        // desktop underneath is repainted and the menu does not linger on
+        // screen after the pointer moves away or the user clicks elsewhere.
+        const ui::UiRect rcMenu = m_pMenuPanel->GetPos();
+        m_pMenuPanel->SetVisible(false);
+        if (!rcMenu.IsEmpty()) {
+            Invalidate(rcMenu);
+        }
+        InvalidateAll();
+    }
+    SetMenuButtonActive(m_openMenuIndex, false);
+    m_openMenuIndex = -1;
+    // Notify the compositor that the desktop dropdown is closed; it lowers the
+    // shell back behind app windows and restores normal app interaction.
+    SetText(_T("PolluxOS Desktop"));
+}
+
+void PolluxOSForm::ToggleMenu(int menuIndex)
+{
+    if (menuIndex < 0 || menuIndex >= kMenuButtonCount) {
+        return;
+    }
+    if (m_openMenuIndex == menuIndex && m_pMenuPanel != nullptr && m_pMenuPanel->IsVisible()) {
+        HideMenuPanel();
+        return;
+    }
+
+    HideMenuPanel();
+
+    ui::UiRect rc = m_menuButtons[menuIndex]->GetRect();
+    if (rc.IsEmpty()) {
+        // Layout not finished yet; fall back to a position under the bar.
+        rc = ui::UiRect(120 + menuIndex * 64, 30, 120 + menuIndex * 64, 30);
+    }
+    ShowMenuPanel(kMenuBarMenus[menuIndex + 1], kMenuBarMenuCounts[menuIndex + 1],
+                  rc.left, rc.bottom + 2);
+
+    m_openMenuIndex = menuIndex;
+    SetMenuButtonActive(menuIndex, true);
+}
+
+void PolluxOSForm::ShowMenuPanel(const MenuItem* items, int count, int x, int y)
+{
+    if (items == nullptr || count <= 0 || m_pMenuPanel == nullptr) {
+        return;
+    }
+
+    m_pMenuPanel->RemoveAllItems();
+
+    const int kItemHeight = 30;
+    const int kPanelPadding = 6;
+    int panelHeight = kPanelPadding * 2;
+
+    for (int i = 0; i < count; ++i) {
+        const MenuItem& entry = items[i];
+        if (entry.separator) {
+            panelHeight += 9;   // 1px hairline + 4px vertical margins
+            ui::Control* pSep = new ui::Control(this);
+            pSep->SetAttribute(_T("height"), _T("1"));
+            pSep->SetAttribute(_T("width"), _T("stretch"));
+            pSep->SetAttribute(_T("margin"), _T("8,4,8,4"));
+            pSep->SetBkColor(kMenuPanelLine);
+            pSep->SetMouseEnabled(false);
+            m_pMenuPanel->AddItem(pSep);
+            continue;
+        }
+
+        panelHeight += kItemHeight;
+        ui::Button* pItem = new ui::Button(this);
+        pItem->SetText(DString(entry.text));
+        pItem->SetAttribute(_T("font"), _T("system_14"));
+        pItem->SetAttribute(_T("text_color"), entry.enabled ? kTextBody : kTextHint);
+        pItem->SetAttribute(_T("text_align"), _T("left,vcenter"));
+        pItem->SetAttribute(_T("text_padding"), _T("10,0,10,0"));
+        pItem->SetAttribute(_T("height"), _T("30"));
+        pItem->SetAttribute(_T("width"), _T("218"));
+        pItem->SetAttribute(_T("margin"), _T("0,0,0,0"));
+        pItem->SetStateColor(ui::kControlStateNormal, kTransparent);
+        pItem->SetStateColor(ui::kControlStateHot,
+                             entry.enabled ? kMenuItemHot : kTransparent);
+        pItem->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(6, 6), false);
+        pItem->SetStateColorRound(ui::kControlStateHot, ui::UiSize(6, 6), false);
+        pItem->SetEnabled(entry.enabled);
+        pItem->SetAttribute(_T("cursor_type"), entry.enabled ? _T("hand") : _T("arrow"));
+
+        const char* cmd = entry.cmd;
+        pItem->AttachClick([this, cmd](const ui::EventArgs& /*args*/) {
+            HideMenuPanel();
+            if (cmd != nullptr && cmd[0] != '\0') {
+                LaunchApp(cmd);
+            }
+            return true;
+        });
+        m_pMenuPanel->AddItem(pItem);
+    }
+
+    m_pMenuPanel->SetAttribute(_T("height"),
+                               ui::StringUtil::Printf(_T("%d"), panelHeight));
+
+    ui::UiRect client;
+    GetClientRect(client);
+    const int kPanelWidth = 230;
+    int px = x;
+    int py = y;
+    if (px + kPanelWidth > client.right) {
+        px = client.right - kPanelWidth - 8;
+    }
+    if (py + panelHeight > client.bottom) {
+        py = client.bottom - panelHeight - 8;
+    }
+    if (px < 4) {
+        px = 4;
+    }
+    if (py < 30) {
+        py = 30;
+    }
+
+    m_pMenuPanel->SetPos(ui::UiRect(px, py, px + kPanelWidth, py + panelHeight));
+    m_pMenuPanel->SetPaintOrder(100);   // paint above bar / dock / desktop
+    m_pMenuPanel->SetVisible(true);
+    // Signal the compositor that a desktop dropdown is open so it can raise
+    // the shell above app windows for the duration of the menu.
+    SetText(_T("PolluxOS Desktop (menu)"));
+    Invalidate(m_pMenuPanel->GetPos());
+}
+
+void PolluxOSForm::ShowQuickMenu(int x, int y)
+{
+    // Opening the right-click menu replaces any open dropdown; clear the
+    // previous menu-button highlight first.
+    HideMenuPanel();
+    ShowMenuPanel(kQuickMenu, kQuickMenuCount, x, y);
+}
+
+void PolluxOSForm::AttachMenuDismissHandlers()
+{
+    // Moving the pointer out of the menu bar and the open dropdown dismisses
+    // the menu (macOS-style "mouse away" behavior).
+    AttachWindowMouseMoveMsg([this](const ui::EventArgs& args) {
+        if (m_pMenuPanel == nullptr || !m_pMenuPanel->IsVisible()) {
+            return true;
+        }
+
+        // macOS menu tracking: after the first click opens a menu, hovering
+        // another menu title switches to that menu without another click.
+        if (m_pAppButton != nullptr &&
+            m_pAppButton->GetPos().ContainsPt(args.ptMouse)) {
+            if (m_openMenuIndex != -1) {
+                HideMenuPanel();
+                ui::UiRect rc = m_pAppButton->GetRect();
+                ShowMenuPanel(kAppMenu, kMenuBarMenuCounts[0],
+                              rc.IsEmpty() ? 12 : rc.left, rc.bottom + 2);
+                m_openMenuIndex = -1;
+            }
+            return true;
+        }
+        for (int mi = 0; mi < kMenuButtonCount; ++mi) {
+            if (m_menuButtons[mi] != nullptr &&
+                m_menuButtons[mi]->GetPos().ContainsPt(args.ptMouse)) {
+                if (m_openMenuIndex != mi) {
+                    ToggleMenu(mi);
+                }
+                return true;
+            }
+        }
+
+        if (!ShouldMenuStayOpenForMove(args.ptMouse)) {
+            HideMenuPanel();
+        }
+        return true;
+    });
+
+    // Pressing anywhere outside the dropdown and the menu-bar buttons closes
+    // it too. The desktop already does this, but this also covers the empty
+    // menu-bar area and the dock row. (The Launchpad is its own overlay
+    // window now and dismisses itself on focus loss.)
+    AttachWindowLButtonDownMsg([this](const ui::EventArgs& args) {
+        if (m_pMenuPanel != nullptr && m_pMenuPanel->IsVisible() &&
+            !ShouldMenuStayOpenForPress(args.ptMouse)) {
+            HideMenuPanel();
+        }
+        return true;
+    });
+
+    // If the shell is ever run in a smaller/nested window, leaving the window
+    // should also close the menus.
+    AttachWindowMouseLeaveMsg([this](const ui::EventArgs& /*args*/) {
+        HideMenuPanel();
+        HideAppPanel();
+        return true;
+    });
+}
+
+bool PolluxOSForm::IsPointInMenuButton(const ui::UiPoint& pt) const
+{
+    if (m_pAppButton != nullptr && m_pAppButton->GetPos().ContainsPt(pt)) {
+        return true;
+    }
+    for (int i = 0; i < kMenuButtonCount; ++i) {
+        if (m_menuButtons[i] != nullptr && m_menuButtons[i]->GetPos().ContainsPt(pt)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool PolluxOSForm::ShouldMenuStayOpenForMove(const ui::UiPoint& pt) const
+{
+    if (m_pMenuPanel == nullptr || !m_pMenuPanel->IsVisible()) {
+        return true;
+    }
+    // Moving along the top bar (between menu buttons) should not close the
+    // dropdown; only leaving both the bar and the panel closes it.
+    if (m_pMenuBar != nullptr && m_pMenuBar->GetPos().ContainsPt(pt)) {
+        return true;
+    }
+    const ui::UiRect panelRect = m_pMenuPanel->GetPos();
+    if (panelRect.ContainsPt(pt)) {
+        return true;
+    }
+    // Keep the small vertical gap between the menu bar and the dropdown part
+    // of the same "menu zone", so moving from a menu button into the panel
+    // (or back) does not dismiss it while crossing that 1-2px gap.
+    if (m_pMenuBar != nullptr) {
+        const ui::UiRect barRect = m_pMenuBar->GetPos();
+        if (pt.y >= barRect.bottom && pt.y <= panelRect.top) {
+            ui::UiRect bridge(panelRect.left, barRect.bottom,
+                              panelRect.right, panelRect.top);
+            if (bridge.ContainsPt(pt)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool PolluxOSForm::ShouldMenuStayOpenForPress(const ui::UiPoint& pt) const
+{
+    if (m_pMenuPanel == nullptr || !m_pMenuPanel->IsVisible()) {
+        return true;
+    }
+    // Clicks inside the dropdown must reach the menu items. Clicks on the
+    // menu-bar buttons are handled by ToggleMenu(), so let that run instead of
+    // hiding the panel here (otherwise clicking the open button could not
+    // close it).
+    if (m_pMenuPanel->GetPos().ContainsPt(pt) || IsPointInMenuButton(pt)) {
+        return true;
+    }
+    return false;
+}
+
+void PolluxOSForm::BuildUi()
+{
+    ui::VBox* pRoot = new ui::VBox(this);
+    /* The wlroots compositor owns the Big Sur wallpaper, every app-window
+     * titlebar and every drop shadow. The dui shell paints the macOS-style
+     * desktop menu bar, dock and native dropdowns, so its surface is
+     * transparent elsewhere; the shell never draws client-side window chrome
+     * or shadows. */
+    pRoot->SetBkColor(kTransparent);
+    pRoot->SetBorderColor(kTransparent);
+    pRoot->SetAttribute(_T("border_size"), _T("0"));
+    pRoot->SetAttribute(_T("padding"), _T("0,0,0,0"));
+
+    BuildMenuBar(pRoot);
+    BuildDesktopArea(pRoot);
+    BuildDock(pRoot);
+
+    // Native in-window dropdown panel (shared by the desktop right-click
+    // quick menu). It is created once, rebuilt per menu and positioned at the
+    // click point.
+    m_pMenuPanel = new ui::VBox(this);
+    m_pMenuPanel->SetFloat(true);
+    // Keep the explicitly positioned dropdown where ShowMenuPanel() put it.
+    m_pMenuPanel->SetKeepFloatPos(true);
+    m_pMenuPanel->SetBkColor(kMenuPanelBg);
+    m_pMenuPanel->SetBorderColor(kMenuPanelLine);
+    m_pMenuPanel->SetAttribute(_T("border_size"), _T("1"));
+    m_pMenuPanel->SetAttribute(_T("width"), _T("230"));
+    m_pMenuPanel->SetAttribute(_T("padding"), _T("6,6,6,6"));
+    m_pMenuPanel->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(10, 10), false);
+    m_pMenuPanel->SetAttribute(_T("border_round"), _T("10,10"));
+    m_pMenuPanel->SetVisible(false);
+    pRoot->AddItem(m_pMenuPanel);
+
+    AttachMenuDismissHandlers();
+
+    AttachBox(pRoot);
+}
+
+void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
+{
+    ui::HBox* pTopBar = new ui::HBox(this);
+    pTopBar->SetAttribute(_T("height"), _T("30"));
+    pTopBar->SetBkColor(kBarBg);
+    pTopBar->SetBorderColor(kBarBorder);
+    pTopBar->SetAttribute(_T("bottom_border_size"), _T("1"));
+    pTopBar->SetAttribute(_T("padding"), _T("12,0,12,0"));
+    pRoot->AddItem(pTopBar);
+    m_pMenuBar = pTopBar;
+
+    // Bold app menu, macOS style (the Apple-menu slot).
+    ui::Button* pAppButton = new ui::Button(this);
+    pAppButton->SetText(_T("PolluxOS"));
+    m_pAppButton = pAppButton;
+    pAppButton->SetAttribute(_T("font"), _T("system_bold_14"));
+    pAppButton->SetAttribute(_T("text_color"), kTextDark);
+    pAppButton->SetAttribute(_T("text_align"), _T("left,vcenter"));
+    pAppButton->SetAttribute(_T("height"), _T("24"));
+    pAppButton->SetAttribute(_T("width"), _T("auto"));
+    pAppButton->SetAttribute(_T("margin"), _T("0,3,4,3"));
+    pAppButton->SetAttribute(_T("text_padding"), _T("6,0,6,0"));
+    pAppButton->SetStateColor(ui::kControlStateNormal, kTransparent);
+    pAppButton->SetStateColor(ui::kControlStateHot, kBarHot);
+    pAppButton->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
+    pAppButton->SetStateColorRound(ui::kControlStateHot, ui::UiSize(5, 5), false);
+    pAppButton->SetAttribute(_T("cursor_type"), _T("hand"));
+    // macOS behavior: merely hovering the menu-bar title pops its menu open,
+    // no click needed (click still works as a toggle).
+    pAppButton->AttachMouseEnter([this, pAppButton](const ui::EventArgs& /*args*/) {
+        if (m_pMenuPanel == nullptr || !m_pMenuPanel->IsVisible() ||
+            m_openMenuIndex != -1) {
+            HideMenuPanel();
+            ui::UiRect rc = pAppButton->GetRect();
+            ShowMenuPanel(kAppMenu, kMenuBarMenuCounts[0],
+                          rc.IsEmpty() ? 12 : rc.left, rc.bottom + 2);
+        }
+        return true;
+    });
+    pAppButton->AttachClick([this, pAppButton](const ui::EventArgs& /*args*/) {
+        HideMenuPanel();
+        ui::UiRect rc = pAppButton->GetRect();
+        ShowMenuPanel(kAppMenu, kMenuBarMenuCounts[0],
+                      rc.IsEmpty() ? 12 : rc.left, rc.bottom + 2);
+        return true;
+    });
+    pTopBar->AddItem(pAppButton);
+
+    // 文件 / 编辑 / 显示 / 前往 / 窗口 / 帮助.
+    for (int mi = 0; mi < kMenuButtonCount; ++mi) {
+        ui::Button* pBtn = new ui::Button(this);
+        pBtn->SetText(kMenuButtonText[mi]);
+        pBtn->SetAttribute(_T("font"), _T("system_14"));
+        pBtn->SetAttribute(_T("text_color"), kTextDark);
+        pBtn->SetAttribute(_T("text_align"), _T("left,vcenter"));
+        pBtn->SetAttribute(_T("height"), _T("24"));
+        pBtn->SetAttribute(_T("width"), _T("auto"));
+        pBtn->SetAttribute(_T("margin"), _T("0,3,2,3"));
+        pBtn->SetAttribute(_T("text_padding"), _T("6,0,6,0"));
+        pBtn->SetStateColor(ui::kControlStateNormal, kTransparent);
+        pBtn->SetStateColor(ui::kControlStateHot, kBarHot);
+        pBtn->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
+        pBtn->SetStateColorRound(ui::kControlStateHot, ui::UiSize(5, 5), false);
+        pBtn->SetAttribute(_T("cursor_type"), _T("hand"));
+        // Hover-to-open: moving the pointer across the menu bar pops each
+        // dropdown without a click (macOS-style menu tracking).
+        pBtn->AttachMouseEnter([this, mi](const ui::EventArgs& /*args*/) {
+            const bool alreadyOpen = m_pMenuPanel != nullptr &&
+                                     m_pMenuPanel->IsVisible() &&
+                                     m_openMenuIndex == mi;
+            if (!alreadyOpen) {
+                ToggleMenu(mi);
+            }
+            return true;
+        });
+        pBtn->AttachClick([this, mi](const ui::EventArgs& /*args*/) {
+            ToggleMenu(mi);
+            return true;
+        });
+        pTopBar->AddItem(pBtn);
+        m_menuButtons[mi] = pBtn;
+    }
+
+    // Right side: spacer pushes the window controls + clock to the right edge.
+    ui::Control* pTopSpacer = new ui::Control(this);
+    pTopSpacer->SetAttribute(_T("width"), _T("stretch"));
+    pTopSpacer->SetAttribute(_T("mouse_enabled"), _T("false"));
+    pTopBar->AddItem(pTopSpacer);
+
+    m_pClockLabel = new ui::Label(this);
+    m_pClockLabel->SetAttribute(_T("font"), _T("system_12"));
+    m_pClockLabel->SetAttribute(_T("text_color"), kTextDark);
+    m_pClockLabel->SetAttribute(_T("text_align"), _T("right,vcenter"));
+    m_pClockLabel->SetAttribute(_T("width"), _T("200"));
+    m_pClockLabel->SetText(_T("--月--日 周- --:--"));
+    pTopBar->AddItem(m_pClockLabel);
+
+    // macOS-style status cluster on the right side of the desktop bar.
+    const DString statusText[] = { _T("网络"), _T("音量"), _T("电量 100%") };
+    for (const DString& text : statusText) {
+        ui::Label* status = new ui::Label(this);
+        status->SetText(text);
+        status->SetAttribute(_T("font"), _T("system_12"));
+        status->SetAttribute(_T("text_color"), kTextDark);
+        status->SetAttribute(_T("text_align"), _T("hcenter,vcenter"));
+        status->SetAttribute(_T("width"), _T("58"));
+        status->SetAttribute(_T("height"), _T("24"));
+        status->SetMouseEnabled(false);
+        pTopBar->AddItem(status);
+    }
+    ui::Button* controlCenter = new ui::Button(this);
+    controlCenter->SetText(_T("控制中心"));
+    controlCenter->SetAttribute(_T("font"), _T("system_12"));
+    controlCenter->SetAttribute(_T("text_color"), kTextDark);
+    controlCenter->SetAttribute(_T("height"), _T("24"));
+    controlCenter->SetAttribute(_T("width"), _T("78"));
+    controlCenter->SetAttribute(_T("margin"), _T("0,3,0,3"));
+    controlCenter->SetStateColor(ui::kControlStateNormal, kTransparent);
+    controlCenter->SetStateColor(ui::kControlStateHot, kBarHot);
+    controlCenter->SetAttribute(_T("border_round"), _T("5,5"));
+    controlCenter->SetAttribute(_T("cursor_type"), _T("hand"));
+    controlCenter->AttachClick([this](const ui::EventArgs&) {
+        LaunchApp("\"$HOME/projects-main/dui/bin/polluxdesk_settings\"");
+        return true;
+    });
+    pTopBar->AddItem(controlCenter);
+}
+
+void PolluxOSForm::BuildDesktopArea(ui::VBox* pRoot)
+{
+    // The desktop area is just the wallpaper: no top bar, no clock/date in the
+    // middle. It only provides the desktop right-click quick menu and dismisses
+    // any open dropdown on a plain left click.
+    ui::VBox* pDesktop = new ui::VBox(this);
+    pDesktop->SetAttribute(_T("height"), _T("stretch"));
+    pDesktop->SetAttribute(_T("mouse_enabled"), _T("true"));
+    pRoot->AddItem(pDesktop);
+
+    // A plain left click on the wallpaper dismisses any open dropdown,
+    // exactly like clicking the macOS desktop. AttachButtonDown is used
+    // because generic Box controls do not synthesize kEventClick.
+    pDesktop->AttachButtonDown([this](const ui::EventArgs& /*args*/) {
+        HideMenuPanel();
+        HideAppPanel();
+        return true;
+    });
+    pDesktop->AttachRClick([this](const ui::EventArgs& args) {
+        ShowQuickMenu(args.ptMouse.x, args.ptMouse.y);
+        return true;
+    });
+}
+
+void PolluxOSForm::BuildDock(ui::VBox* pRoot)
+{
+    // macOS-style centered translucent icon dock (no labels, like the real
+    // Dock). The dock is wrapped in a full-width HBox with
+    // child_align="hcenter,vcenter": that reliably centers the auto-width
+    // frosted bar on the screen.
+    ui::HBox* pDockRow = new ui::HBox(this);
+    pDockRow->SetAttribute(_T("height"), _T("92"));
+    pDockRow->SetAttribute(_T("child_align"), _T("hcenter,vcenter"));
+    pDockRow->SetAttribute(_T("margin"), _T("0,0,0,14"));
+    pRoot->AddItem(pDockRow);
+
+    ui::HBox* pDock = new ui::HBox(this);
+    pDock->SetAttribute(_T("height"), _T("76"));
+    pDock->SetAttribute(_T("width"), _T("auto"));
+    pDock->SetAttribute(_T("padding"), _T("6,6,6,6"));
+    pDock->SetAttribute(_T("child_align"), _T("hcenter,vcenter"));
+    pDock->SetBkColor(kDockBg);
+    pDock->SetBorderColor(kDockBorder);
+    pDock->SetAttribute(_T("border_size"), _T("1"));
+    pDock->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(18, 18), false);
+    pDock->SetAttribute(_T("border_round"), _T("18,18"));
+    pDockRow->AddItem(pDock);
+
+    const int kDockCount = static_cast<int>(sizeof(kDockApps) / sizeof(kDockApps[0]));
+    for (int i = 0; i < kDockCount; ++i) {
+        // One icon tile per app; the label is a tooltip, macOS style.
+        ui::Button* pIcon = new ui::Button(this);
+        pIcon->SetText(DString(kDockApps[i].glyph));
+        if (kDockApps[i].icon != nullptr) {
+            pIcon->SetText(_T(""));
+            pIcon->SetBkImage(DString(_T("file='")) + kDockApps[i].icon +
+                              _T("' width='48' height='48' halign='center' valign='center'"));
+        }
+        pIcon->SetAttribute(_T("font"), _T("system_bold_22"));
+        pIcon->SetAttribute(_T("text_color"), _T("#FFFFFFFF"));
+        pIcon->SetAttribute(_T("text_align"), _T("hcenter,vcenter"));
+        pIcon->SetAttribute(_T("height"), _T("56"));
+        pIcon->SetAttribute(_T("width"), _T("56"));
+        pIcon->SetAttribute(_T("margin"), _T("4,0,4,0"));
+        pIcon->SetBkColor(DString(kDockApps[i].color));
+        pIcon->SetBkColor2(DString(kDockApps[i].color2));
+        pIcon->SetBkColor2Direction(_T("1"));   // left -> right gradient
+        pIcon->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(14, 14), false);
+        pIcon->SetStateColorRound(ui::kControlStateHot, ui::UiSize(14, 14), false);
+        pIcon->SetStateColorRound(ui::kControlStatePushed, ui::UiSize(14, 14), false);
+        pIcon->SetAttribute(_T("border_round"), _T("14,14"));
+        pIcon->SetBorderColor(ui::kControlStateNormal, DString(kDockApps[i].color2));
+        pIcon->SetBorderColor(ui::kControlStateHot, kAccent);
+        pIcon->SetAttribute(_T("cursor_type"), _T("hand"));
+        pIcon->SetToolTipText(DString(kDockApps[i].label));
+        pIcon->AttachClick([this, i](const ui::EventArgs& /*args*/) {
+            HideMenuPanel();
+            if (kDockApps[i].cmd[0] == '\0') {
+                ShowLaunchPad();   // the 启动台 tile opens the app grid
+            } else {
+                LaunchApp(kDockApps[i].cmd);
+            }
+            return true;
+        });
+        pDock->AddItem(pIcon);
+    }
+}
+
+void PolluxOSForm::StartClock()
+{
+    UpdateClock();
+    m_clockTimerId = ui::GlobalManager::Instance().Timer().AddTimer(GetWeakFlag(), [this]() {
+        UpdateClock();
+    }, 1000);
+}
+
+void PolluxOSForm::UpdateClock()
+{
+    if (m_pClockLabel == nullptr && m_pDesktopClockLabel == nullptr &&
+        m_pDesktopDateLabel == nullptr) {
+        return;
+    }
+    std::time_t now = std::time(nullptr);
+    std::tm tm_now;
+    localtime_r(&now, &tm_now);
+
+    const char* weekdays[] = { "周日", "周一", "周二", "周三", "周四", "周五", "周六" };
+    char menuTimeBuf[80];
+    std::snprintf(menuTimeBuf, sizeof(menuTimeBuf), "%02d月%02d日 %s %02d:%02d",
+                  tm_now.tm_mon + 1, tm_now.tm_mday,
+                  weekdays[tm_now.tm_wday],
+                  tm_now.tm_hour, tm_now.tm_min);
+
+    // The menu-bar clock shows minutes: skip SetText when the string did not
+    // change, otherwise the timer invalidates the shell every second even
+    // though the rendered text is identical.
+    if (m_pClockLabel != nullptr && m_pClockLabel->GetText() != DString(menuTimeBuf)) {
+        m_pClockLabel->SetText(DString(menuTimeBuf));
+    }
+
+    char desktopTimeBuf[32];
+    std::snprintf(desktopTimeBuf, sizeof(desktopTimeBuf), "%02d:%02d:%02d",
+                  tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec);
+    if (m_pDesktopClockLabel != nullptr) {
+        m_pDesktopClockLabel->SetText(DString(desktopTimeBuf));
+    }
+
+    char desktopDateBuf[80];
+    std::snprintf(desktopDateBuf, sizeof(desktopDateBuf), "%04d年%02d月%02d日 %s",
+                  tm_now.tm_year + 1900, tm_now.tm_mon + 1, tm_now.tm_mday,
+                  weekdays[tm_now.tm_wday]);
+    if (m_pDesktopDateLabel != nullptr) {
+        m_pDesktopDateLabel->SetText(DString(desktopDateBuf));
+    }
+}

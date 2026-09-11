@@ -1,6 +1,6 @@
 # PolluxOS 顶层总控 —— 注意: 各子系统的构建系统保持官方原样:
 #   FreeBSD base: bmake  base/freebsd-src/
-#   dui/stardesk: CMake  userland/
+#   dui/polluxdesk: CMake  userland/
 # 本 Makefile 只做调度与编排。
 # 运行环境: FreeBSD(构建 world/kernel 必须在 FreeBSD 上)。
 
@@ -35,7 +35,7 @@ kernel: world
 	env MAKEOBJDIRPREFIX=$(OBJPREFIX) SRCCONF=$(ROOT)/config/src.conf \
 	    make -C $(BASE) buildkernel KERNCONF=$(KERNCONF) -j$(JOBS)
 
-# ---- dui / stardesk (CMake) -------------------------------------------
+# ---- dui / polluxdesk (CMake) -------------------------------------------
 dui:
 	cmake -S userland/dui -B $(BUILD)/dui -DCMAKE_BUILD_TYPE=Release \
 	    -DDUI_ENABLE_WAYLAND=ON -DDUI_ENABLE_SDL=OFF
@@ -43,10 +43,10 @@ dui:
 	cmake --install $(BUILD)/dui --prefix $(PREFIX)
 
 userland: dui
-	cmake -S userland/stardesk -B $(BUILD)/stardesk -DCMAKE_BUILD_TYPE=Release \
+	cmake -S userland/polluxdesk -B $(BUILD)/polluxdesk -DCMAKE_BUILD_TYPE=Release \
 	    -DCMAKE_PREFIX_PATH=$(PREFIX) -DDUI_ROOT=$(PREFIX)
-	cmake --build $(BUILD)/stardesk -j$(JOBS)
-	cmake --install $(BUILD)/stardesk --prefix $(PREFIX)
+	cmake --build $(BUILD)/polluxdesk -j$(JOBS)
+	cmake --install $(BUILD)/polluxdesk --prefix $(PREFIX)
 
 # ---- 镜像 ---------------------------------------------------------------
 image: kernel userland

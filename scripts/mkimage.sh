@@ -17,7 +17,7 @@ ESP_IMG="$BUILD/efiboot.img"
 FS_IMG="$BUILD/rootfs.ufs"
 ESP_SIZE="${ESP_SIZE:-260m}"
 
-# 1. 用户态进 rootfs (dui/stardesk 装到 PREFIX，整体铺到 /usr/local)
+# 1. 用户态进 rootfs (dui/polluxdesk 装到 PREFIX，整体铺到 /usr/local)
 mkdir -p "$DESTDIR/usr/local"
 cp -R "$PREFIX"/. "$DESTDIR/usr/local/"
 

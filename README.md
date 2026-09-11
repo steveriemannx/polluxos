@@ -7,7 +7,7 @@ as its GUI framework. dui connects to the display stack through its native
 not used.
 
 The goal is a dd-able UEFI image: write `build/polluxos.img` to a USB stick or
-disk and boot straight into the stardesk desktop shell (taskbar, launcher,
+disk and boot straight into the polluxdesk desktop shell (taskbar, launcher,
 dui + Skia rendering).
 
 ## Layout
@@ -18,7 +18,7 @@ dui + Skia rendering).
 | `config/` | KERNCONF / src.conf / make.conf / rc.conf (build & runtime config) | — |
 | `patches/` | Patches against base (git format-patch) | — |
 | `userland/dui/` | dui library (submodule, Wayland backend) | CMake |
-| `userland/stardesk/` | Desktop shell (taskbar/launcher, drawn by dui) | CMake |
+| `userland/polluxdesk/` | Desktop shell (taskbar/launcher, drawn by dui) | CMake |
 | `overlay/` | Files copied verbatim into the rootfs | — |
 | `scripts/` | fetch / apply-patches / build / mkimage / run-qemu / setup-build-host | — |
 
@@ -56,7 +56,7 @@ DESTDIR ~6 GB + dui/Skia ~3 GB + image). Only when your host disk allows it.
 #   git submodule add <dui repo url> userland/dui
 git submodule update --init --depth 1 base/freebsd-src
 
-# Full chain: buildworld -> buildkernel -> dui/stardesk -> polluxos.img
+# Full chain: buildworld -> buildkernel -> dui/polluxdesk -> polluxos.img
 make -j8
 
 # Or step by step
@@ -76,7 +76,7 @@ dd if=build/polluxos.img of=/dev/diskX bs=1m conv=sync
 kernel (vt + efifb/drm) ──► /dev/dri KMS ──► mesa/EGL ──► dui (PolluxOS drawing)
                                    │
           weston / sway (compositor) ┘
-            └─ stardesk runs as a Wayland client
+            └─ polluxdesk runs as a Wayland client
 ```
 
 - The FreeBSD kernel provides KMS/DRM and vt(4); the userland Wayland stack
