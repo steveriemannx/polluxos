@@ -32,6 +32,7 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_shm.h>
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
@@ -85,7 +86,9 @@ struct polluxdesk_server {
 	struct wl_listener cursor_frame;
 
 	struct wlr_seat *seat;
+	struct wlr_virtual_pointer_manager_v1 *virtual_pointer_mgr;
 	struct wl_listener new_input;
+	struct wl_listener new_virtual_pointer;
 	struct wl_listener request_cursor;
 	struct wl_listener pointer_focus_change;
 	struct wl_listener request_set_selection;
@@ -1101,6 +1104,21 @@ static void server_new_pointer(struct polluxdesk_server *server,
 	 * opportunity to do libinput configuration on the device to set
 	 * acceleration, etc. */
 	wlr_cursor_attach_input_device(server->cursor, device);
+}
+
+static void server_new_virtual_pointer(struct wl_listener *listener,
+		void *data) {
+	/* Test hook companion to POLLUX_VIRTUAL_INPUT.  A virtual pointer arrives
+	 * as an input device that nobody has attached to the cursor yet, so
+	 * without this its motion and button events are delivered to the
+	 * protocol and then dropped: wlrctl would report success while the
+	 * cursor never moves.  Attaching it makes the injected events follow the
+	 * same path as a real mouse. */
+	struct polluxdesk_server *server =
+		wl_container_of(listener, server, new_virtual_pointer);
+	struct wlr_virtual_pointer_v1_new_pointer_event *event = data;
+	wlr_cursor_attach_input_device(server->cursor,
+		&event->new_pointer->pointer.base);
 }
 
 static void server_new_input(struct wl_listener *listener, void *data) {
@@ -2256,6 +2274,21 @@ int main(int argc, char *argv[]) {
 	server.new_input.notify = server_new_input;
 	wl_signal_add(&server.backend->events.new_input, &server.new_input);
 	server.seat = wlr_seat_create(server.wl_display, "seat0");
+
+	/*
+	 * Test hook: expose the wlroots virtual-pointer protocol so an automated
+	 * harness (wlrctl) can drive the cursor for UI verification on a headless
+	 * build host.  Off unless explicitly requested, because with it enabled
+	 * any connected client could move the pointer and click on its own.
+	 */
+	if (getenv("POLLUX_VIRTUAL_INPUT") != NULL) {
+		server.virtual_pointer_mgr =
+			wlr_virtual_pointer_manager_v1_create(server.wl_display);
+		server.new_virtual_pointer.notify = server_new_virtual_pointer;
+		wl_signal_add(&server.virtual_pointer_mgr->events.new_virtual_pointer,
+			&server.new_virtual_pointer);
+		wlr_log(WLR_INFO, "virtual pointer manager enabled (test hook)");
+	}
 	server.request_cursor.notify = seat_request_cursor;
 	wl_signal_add(&server.seat->events.request_set_cursor,
 			&server.request_cursor);
