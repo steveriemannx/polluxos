@@ -2,3 +2,7 @@
 	branch = stable/15
 	path = base/freebsd-src
 	url = https://github.com/freebsd/freebsd-src
+[submodule "userland/dui"]
+	path = userland/dui
+	url = ssh://shxu@192.168.137.184/~/projects-main/dui-dev
+	branch = polluxos-dev
