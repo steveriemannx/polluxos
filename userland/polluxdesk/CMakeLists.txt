@@ -1,26 +1,43 @@
-cmake_minimum_required(VERSION 3.20)
-project(polluxdesk LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.18)
+set(CMAKE_POLICY_DEFAULT_CMP0091 NEW)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# PolluxOS desktop: ONE cmake tree so dui's dependency machinery runs once.
+# Splitting the components into separate projects made each one build its own
+# copy of Skia (dui's DUI_DEPS_CONFIGURED guard is a CMake GLOBAL property, which
+# only spans a single tree).
+project(polluxdesk CXX)
 
-# dui 以 DUI_ROOT 指向 build/prefix（dui install 后的前缀树）。
-# TODO: dui 若导出 CMake package(duiConfig.cmake)，改用 find_package(dui CONFIG)。
-if(NOT DEFINED DUI_ROOT)
-    set(DUI_ROOT "${CMAKE_INSTALL_PREFIX}")
+# Skia ships C sources (expat, libpng, ...); without C they get compiled by the
+# C++ driver and fail on implicit void* conversions.
+enable_language(C)
+
+get_filename_component(DUI_SRC_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/../dui/" ABSOLUTE)
+
+# Reuse the Skia already built by the dui build tree instead of rebuilding it
+# here. dui's own cmake skips regeneration when libskia.a is already present.
+set(_pd_dui_build "${CMAKE_CURRENT_LIST_DIR}/../../build/dui")
+set(DUI_BUILD_SKIA_FROM_SOURCE OFF CACHE BOOL "" FORCE)
+set(DUI_SKIA_LIB_PATH "${CMAKE_BINARY_DIR}/lib/release" CACHE PATH "" FORCE)
+set(DUI_SKIA_LIB_PATH_RELEASE "${CMAKE_BINARY_DIR}/lib/release" CACHE PATH "" FORCE)
+
+include("${DUI_SRC_ROOT_DIR}/cmake/dui_common.cmake")
+
+if(NOT EXISTS "${DUI_SKIA_LIB_PATH_RELEASE}/libskia.a")
+    file(MAKE_DIRECTORY "${DUI_SKIA_LIB_PATH_RELEASE}")
+    file(GLOB _pd_skia "${_pd_dui_build}/lib/release/*")
+    foreach(_f IN LISTS _pd_skia)
+        get_filename_component(_n "${_f}" NAME)
+        execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink "${_f}" "${DUI_SKIA_LIB_PATH_RELEASE}/${_n}")
+    endforeach()
 endif()
-find_path(DUI_INCLUDE_DIR dui.h PATH_SUFFIXES dui include HINTS "${DUI_ROOT}/include")
-find_library(DUI_LIBRARY NAMES dui HINTS "${DUI_ROOT}/lib" "${DUI_ROOT}/lib64")
-if(NOT DUI_INCLUDE_DIR OR NOT DUI_LIBRARY)
-    message(FATAL_ERROR "dui not found under ${DUI_ROOT}, 先构建 dui (make dui)")
+
+# `dui` itself is already built in the dui tree; this tree builds only the
+# desktop executables that link against it.
+link_directories("${_pd_dui_build}/lib" "${_pd_dui_build}/lib/release")
+if(NOT DEFINED EPOLL_SHIM_LIBRARY AND EXISTS "/usr/local/lib/libepoll-shim.so")
+    set(EPOLL_SHIM_LIBRARY "/usr/local/lib/libepoll-shim.so")
 endif()
 
-add_executable(polluxdesk
-    main.cpp
-)
-target_include_directories(polluxdesk PRIVATE "${DUI_INCLUDE_DIR}")
-target_link_libraries(polluxdesk PRIVATE "${DUI_LIBRARY}")
-
-install(TARGETS polluxdesk DESTINATION bin)
-# UI 资源(布局 XML、主题)铺到 /usr/local/share/polluxos
-install(DIRECTORY ui/ DESTINATION share/polluxos)
+foreach(component shell apps files settings)
+    add_subdirectory(${component})
+endforeach()

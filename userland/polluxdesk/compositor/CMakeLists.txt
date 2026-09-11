@@ -54,6 +54,10 @@ target_link_libraries(polluxdesk-compositor PRIVATE
     ${PIXMAN_LIBRARIES}
     ${XKBCOMMON_LIBRARIES})
 
-# Land next to the other dui binaries.
-set_target_properties(polluxdesk-compositor PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${DUI_ROOT}/bin")
+# Land next to the other desktop binaries when built from a tree that defines
+# DUI_ROOT (the dui cmake modules); otherwise use this build tree. A bare
+# ${DUI_ROOT}/bin would expand to /bin and the link would fail on permissions.
+if(DEFINED DUI_ROOT AND IS_ABSOLUTE "${DUI_ROOT}")
+    set_target_properties(polluxdesk-compositor PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${DUI_ROOT}/bin")
+endif()

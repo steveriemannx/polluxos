@@ -9,7 +9,7 @@
 class App : public ui::FrameworkThread
 {
 public:
-    App() : FrameworkThread(_T("App"), ui::kThreadUI) {}
+    App() : FrameworkThread(DUI_T("App"), ui::kThreadUI) {}
 
     void Run() { RunMessageLoop(); }
 
@@ -22,7 +22,7 @@ private:
             ui::MemoryResParam(GetEmbeddedResourcesData(), GetEmbeddedResourcesSize()));
 
         FilesForm* window = new FilesForm();
-        window->CreateWnd(nullptr, ui::WindowCreateParam(_T("PolluxOS Files"), true));
+        window->CreateWnd(nullptr, ui::WindowCreateParam(DUI_T("PolluxOS Files"), true));
         // Clicking the compositor's red traffic light sends an xdg close:
         // without this the window is destroyed but the process lingers
         // invisibly (the "traffic lights do not work" symptom).

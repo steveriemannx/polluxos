@@ -13,16 +13,16 @@
 namespace {
 
 // macOS Big Sur / Sonoma light palette (matches the PolluxOS shell).
-const DString kBarBg        = _T("#F2FFFFFF");
-const DString kBarBorder    = _T("#33000000");
-const DString kTransparent  = _T("#00000000");
-const DString kListBg       = _T("#F9FFFFFF");
-const DString kRowHot       = _T("#220A84FF");
-const DString kTextDark     = _T("#FF1D1D1F");
-const DString kTextBody     = _T("#FF3A3A3C");
-const DString kTextHint     = _T("#FF8E8E93");
-const DString kAccent       = _T("#FF0A84FF");
-const DString kFolderColor  = _T("#FF4C9FDB");
+const DString kBarBg        = DUI_T("#F2FFFFFF");
+const DString kBarBorder    = DUI_T("#33000000");
+const DString kTransparent  = DUI_T("#00000000");
+const DString kListBg       = DUI_T("#F9FFFFFF");
+const DString kRowHot       = DUI_T("#220A84FF");
+const DString kTextDark     = DUI_T("#FF1D1D1F");
+const DString kTextBody     = DUI_T("#FF3A3A3C");
+const DString kTextHint     = DUI_T("#FF8E8E93");
+const DString kAccent       = DUI_T("#FF0A84FF");
+const DString kFolderColor  = DUI_T("#FF4C9FDB");
 
 DString FormatSize(long long bytes)
 {
@@ -73,13 +73,13 @@ FilesForm::~FilesForm()
 
 DString FilesForm::GetSkinFolder()
 {
-    return _T("");
+    return DUI_T("");
 }
 
 DString FilesForm::GetSkinFile()
 {
     // Pure code mode: no layout XML is loaded
-    return _T("");
+    return DUI_T("");
 }
 
 void FilesForm::GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs)
@@ -108,7 +108,7 @@ void FilesForm::OnInitWindow()
     BaseClass::OnInitWindow();
 
     Navigate(std::getenv("HOME") != nullptr ? DString(std::getenv("HOME"))
-                                            : DString(_T("/")));
+                                            : DString(DUI_T("/")));
 }
 
 void FilesForm::BuildUi()
@@ -116,8 +116,8 @@ void FilesForm::BuildUi()
     ui::VBox* pRoot = new ui::VBox(this);
     pRoot->SetBkColor(kTransparent);
     pRoot->SetBorderColor(kTransparent);
-    pRoot->SetAttribute(_T("border_size"), _T("0"));
-    pRoot->SetAttribute(_T("padding"), _T("0,0,0,0"));
+    pRoot->SetAttribute(DUI_T("border_size"), DUI_T("0"));
+    pRoot->SetAttribute(DUI_T("padding"), DUI_T("0,0,0,0"));
 
     BuildToolbar(pRoot);
     BuildFileList(pRoot);
@@ -129,18 +129,18 @@ void FilesForm::BuildUi()
 static void MakeToolButton(ui::Button* pBtn, const DString& text)
 {
     pBtn->SetText(text);
-    pBtn->SetAttribute(_T("font"), _T("system_14"));
-    pBtn->SetAttribute(_T("text_color"), kTextDark);
-    pBtn->SetAttribute(_T("text_align"), _T("hcenter,vcenter"));
-    pBtn->SetAttribute(_T("height"), _T("30"));
-    pBtn->SetAttribute(_T("width"), _T("auto"));
-    pBtn->SetAttribute(_T("margin"), _T("4,3,4,3"));
-    pBtn->SetAttribute(_T("text_padding"), _T("10,0,10,0"));
+    pBtn->SetAttribute(DUI_T("font"), DUI_T("system_14"));
+    pBtn->SetAttribute(DUI_T("text_color"), kTextDark);
+    pBtn->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
+    pBtn->SetAttribute(DUI_T("height"), DUI_T("30"));
+    pBtn->SetAttribute(DUI_T("width"), DUI_T("auto"));
+    pBtn->SetAttribute(DUI_T("margin"), DUI_T("4,3,4,3"));
+    pBtn->SetAttribute(DUI_T("text_padding"), DUI_T("10,0,10,0"));
     pBtn->SetStateColor(ui::kControlStateNormal, kTransparent);
     pBtn->SetStateColor(ui::kControlStateHot, kRowHot);
     pBtn->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(6, 6), false);
     pBtn->SetStateColorRound(ui::kControlStateHot, ui::UiSize(6, 6), false);
-    pBtn->SetAttribute(_T("cursor_type"), _T("hand"));
+    pBtn->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
 }
 
 void FilesForm::BuildToolbar(ui::VBox* pRoot)
@@ -148,15 +148,15 @@ void FilesForm::BuildToolbar(ui::VBox* pRoot)
     // Finder-style toolbar: just the back / forward chevrons and the current
     // folder name. (macOS keeps the toolbar minimal; no terminal/refresh.)
     ui::HBox* pBar = new ui::HBox(this);
-    pBar->SetAttribute(_T("height"), _T("40"));
+    pBar->SetAttribute(DUI_T("height"), DUI_T("40"));
     pBar->SetBkColor(kBarBg);
     pBar->SetBorderColor(kBarBorder);
-    pBar->SetAttribute(_T("bottom_border_size"), _T("1"));
-    pBar->SetAttribute(_T("padding"), _T("8,0,8,0"));
+    pBar->SetAttribute(DUI_T("bottom_border_size"), DUI_T("1"));
+    pBar->SetAttribute(DUI_T("padding"), DUI_T("8,0,8,0"));
     pRoot->AddItem(pBar);
 
     ui::Button* pBack = new ui::Button(this);
-    MakeToolButton(pBack, _T("‹"));
+    MakeToolButton(pBack, DUI_T("‹"));
     pBack->AttachClick([this](const ui::EventArgs& /*args*/) {
         NavigateBack();
         return true;
@@ -164,7 +164,7 @@ void FilesForm::BuildToolbar(ui::VBox* pRoot)
     pBar->AddItem(pBack);
 
     ui::Button* pForward = new ui::Button(this);
-    MakeToolButton(pForward, _T("›"));
+    MakeToolButton(pForward, DUI_T("›"));
     pForward->AttachClick([this](const ui::EventArgs& /*args*/) {
         NavigateForward();
         return true;
@@ -173,11 +173,11 @@ void FilesForm::BuildToolbar(ui::VBox* pRoot)
 
     // Current folder name, Finder style (bold, centered in the toolbar).
     m_pPathLabel = new ui::Label(this);
-    m_pPathLabel->SetAttribute(_T("font"), _T("system_bold_16"));
-    m_pPathLabel->SetAttribute(_T("text_color"), kTextDark);
-    m_pPathLabel->SetAttribute(_T("text_align"), _T("hcenter,vcenter"));
-    m_pPathLabel->SetAttribute(_T("width"), _T("stretch"));
-    m_pPathLabel->SetText(_T(""));
+    m_pPathLabel->SetAttribute(DUI_T("font"), DUI_T("system_bold_16"));
+    m_pPathLabel->SetAttribute(DUI_T("text_color"), kTextDark);
+    m_pPathLabel->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
+    m_pPathLabel->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    m_pPathLabel->SetText(DUI_T(""));
     m_pPathLabel->SetMouseEnabled(false);
     pBar->AddItem(m_pPathLabel);
 }
@@ -187,22 +187,22 @@ void FilesForm::BuildToolbar(ui::VBox* pRoot)
 static ui::VBox* MakeFolderIcon(ui::Window* pWindow)
 {
     ui::VBox* pIcon = new ui::VBox(pWindow);
-    pIcon->SetAttribute(_T("width"), _T("26"));
-    pIcon->SetAttribute(_T("height"), _T("20"));
-    pIcon->SetBkColor(_T("#FF63B0ED"));
-    pIcon->SetBkColor2(_T("#FF3E8ECA"));
-    pIcon->SetBkColor2Direction(_T("1"));   // left -> right gradient
+    pIcon->SetAttribute(DUI_T("width"), DUI_T("26"));
+    pIcon->SetAttribute(DUI_T("height"), DUI_T("20"));
+    pIcon->SetBkColor(DUI_T("#FF63B0ED"));
+    pIcon->SetBkColor2(DUI_T("#FF3E8ECA"));
+    pIcon->SetBkColor2Direction(DUI_T("1"));   // left -> right gradient
     pIcon->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
-    pIcon->SetAttribute(_T("border_round"), _T("5,5"));
+    pIcon->SetAttribute(DUI_T("border_round"), DUI_T("5,5"));
     pIcon->SetMouseEnabled(false);
 
     // The folder tab: a darker rounded strip peeking from the top-left.
     ui::Control* pTab = new ui::Control(pWindow);
-    pTab->SetAttribute(_T("width"), _T("12"));
-    pTab->SetAttribute(_T("height"), _T("4"));
-    pTab->SetAttribute(_T("margin"), _T("-1,-2,0,0"));
-    pTab->SetAttribute(_T("halign"), _T("left"));
-    pTab->SetBkColor(_T("#FF2F7AB8"));
+    pTab->SetAttribute(DUI_T("width"), DUI_T("12"));
+    pTab->SetAttribute(DUI_T("height"), DUI_T("4"));
+    pTab->SetAttribute(DUI_T("margin"), DUI_T("-1,-2,0,0"));
+    pTab->SetAttribute(DUI_T("halign"), DUI_T("left"));
+    pTab->SetBkColor(DUI_T("#FF2F7AB8"));
     pTab->SetMouseEnabled(false);
     pIcon->AddItem(pTab);
     return pIcon;
@@ -212,26 +212,26 @@ static ui::VBox* MakeFolderIcon(ui::Window* pWindow)
 static ui::VBox* MakeFileIcon(ui::Window* pWindow)
 {
     ui::VBox* pIcon = new ui::VBox(pWindow);
-    pIcon->SetAttribute(_T("width"), _T("18"));
-    pIcon->SetAttribute(_T("height"), _T("20"));
-    pIcon->SetBkColor(_T("#FFFFFFFF"));
-    pIcon->SetBorderColor(_T("#FFC9C9CE"));
-    pIcon->SetAttribute(_T("border_size"), _T("1"));
+    pIcon->SetAttribute(DUI_T("width"), DUI_T("18"));
+    pIcon->SetAttribute(DUI_T("height"), DUI_T("20"));
+    pIcon->SetBkColor(DUI_T("#FFFFFFFF"));
+    pIcon->SetBorderColor(DUI_T("#FFC9C9CE"));
+    pIcon->SetAttribute(DUI_T("border_size"), DUI_T("1"));
     pIcon->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(3, 3), false);
-    pIcon->SetAttribute(_T("border_round"), _T("3,3"));
-    pIcon->SetAttribute(_T("child_align"), _T("hcenter,vcenter"));
+    pIcon->SetAttribute(DUI_T("border_round"), DUI_T("3,3"));
+    pIcon->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
     pIcon->SetMouseEnabled(false);
     for (int i = 0; i < 3; ++i) {
         if (i > 0) {
             ui::Control* pGap = new ui::Control(pWindow);
-            pGap->SetAttribute(_T("height"), _T("2"));
+            pGap->SetAttribute(DUI_T("height"), DUI_T("2"));
             pGap->SetMouseEnabled(false);
             pIcon->AddItem(pGap);
         }
         ui::Control* pLine = new ui::Control(pWindow);
-        pLine->SetAttribute(_T("height"), _T("1"));
-        pLine->SetAttribute(_T("width"), _T("10"));
-        pLine->SetBkColor(_T("#FFC7C7CC"));
+        pLine->SetAttribute(DUI_T("height"), DUI_T("1"));
+        pLine->SetAttribute(DUI_T("width"), DUI_T("10"));
+        pLine->SetBkColor(DUI_T("#FFC7C7CC"));
         pLine->SetMouseEnabled(false);
         pIcon->AddItem(pLine);
     }
@@ -244,29 +244,29 @@ void FilesForm::BuildFileList(ui::VBox* pRoot)
     // the vscrollbar attribute. Home has 40+ directories, so scrolling is
     // required to reach entries below the fold.
     m_pFileList = new ui::VScrollBox(this);
-    m_pFileList->SetAttribute(_T("height"), _T("stretch"));
+    m_pFileList->SetAttribute(DUI_T("height"), DUI_T("stretch"));
     m_pFileList->SetBkColor(kListBg);
-    m_pFileList->SetAttribute(_T("padding"), _T("6,6,6,6"));
-    m_pFileList->SetAttribute(_T("vscrollbar"), _T("true"));
+    m_pFileList->SetAttribute(DUI_T("padding"), DUI_T("6,6,6,6"));
+    m_pFileList->SetAttribute(DUI_T("vscrollbar"), DUI_T("true"));
     pRoot->AddItem(m_pFileList);
 }
 
 void FilesForm::BuildStatusBar(ui::VBox* pRoot)
 {
     ui::HBox* pBar = new ui::HBox(this);
-    pBar->SetAttribute(_T("height"), _T("26"));
+    pBar->SetAttribute(DUI_T("height"), DUI_T("26"));
     pBar->SetBkColor(kBarBg);
     pBar->SetBorderColor(kBarBorder);
-    pBar->SetAttribute(_T("top_border_size"), _T("1"));
-    pBar->SetAttribute(_T("padding"), _T("10,0,10,0"));
+    pBar->SetAttribute(DUI_T("top_border_size"), DUI_T("1"));
+    pBar->SetAttribute(DUI_T("padding"), DUI_T("10,0,10,0"));
     pRoot->AddItem(pBar);
 
     m_pStatusLabel = new ui::Label(this);
-    m_pStatusLabel->SetAttribute(_T("font"), _T("system_12"));
-    m_pStatusLabel->SetAttribute(_T("text_color"), kTextHint);
-    m_pStatusLabel->SetAttribute(_T("text_align"), _T("left,vcenter"));
-    m_pStatusLabel->SetAttribute(_T("width"), _T("stretch"));
-    m_pStatusLabel->SetText(_T(""));
+    m_pStatusLabel->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+    m_pStatusLabel->SetAttribute(DUI_T("text_color"), kTextHint);
+    m_pStatusLabel->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
+    m_pStatusLabel->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    m_pStatusLabel->SetText(DUI_T(""));
     m_pStatusLabel->SetMouseEnabled(false);
     pBar->AddItem(m_pStatusLabel);
 }
@@ -290,8 +290,8 @@ bool FilesForm::ListDirectory(const DString& dir, std::vector<Entry>& out)
         entry.size = 0;
 
         DString full = dir;
-        if (!full.empty() && full.back() != _T('/')) {
-            full += _T('/');
+        if (!full.empty() && full.back() != DUI_T('/')) {
+            full += DUI_T('/');
         }
         full += entry.name;
 
@@ -329,8 +329,8 @@ void FilesForm::Navigate(const DString& path)
     std::vector<Entry> entries;
     if (!ListDirectory(path, entries)) {
         if (m_pStatusLabel != nullptr) {
-            m_pStatusLabel->SetText(_T("无法打开目录：") + path);
-            m_pStatusLabel->SetAttribute(_T("text_color"), _T("#FFFF453A"));
+            m_pStatusLabel->SetText(DUI_T("无法打开目录：") + path);
+            m_pStatusLabel->SetAttribute(DUI_T("text_color"), DUI_T("#FFFF453A"));
         }
         return;
     }
@@ -408,14 +408,14 @@ void FilesForm::ReloadList()
 
         // One clickable row: [glyph] name | size | modified time.
         ui::ButtonHBox* pRow = new ui::ButtonHBox(this);
-        pRow->SetAttribute(_T("height"), _T("30"));
-        pRow->SetAttribute(_T("width"), _T("stretch"));
-        pRow->SetAttribute(_T("padding"), _T("6,0,6,0"));
+        pRow->SetAttribute(DUI_T("height"), DUI_T("30"));
+        pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        pRow->SetAttribute(DUI_T("padding"), DUI_T("6,0,6,0"));
         pRow->SetStateColor(ui::kControlStateNormal, kTransparent);
         pRow->SetStateColor(ui::kControlStateHot, kRowHot);
         pRow->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(6, 6), false);
         pRow->SetStateColorRound(ui::kControlStateHot, ui::UiSize(6, 6), false);
-        pRow->SetAttribute(_T("cursor_type"), _T("arrow"));
+        pRow->SetAttribute(DUI_T("cursor_type"), DUI_T("arrow"));
 
         const size_t index = i;
         pRow->AttachClick([this, index](const ui::EventArgs& /*args*/) {
@@ -428,9 +428,9 @@ void FilesForm::ReloadList()
         // macOS Finder-style row icon (blue folder / white document),
         // inside a fixed-width cell so the names align.
         ui::HBox* pIconCell = new ui::HBox(this);
-        pIconCell->SetAttribute(_T("width"), _T("36"));
-        pIconCell->SetAttribute(_T("height"), _T("stretch"));
-        pIconCell->SetAttribute(_T("child_align"), _T("hcenter,vcenter"));
+        pIconCell->SetAttribute(DUI_T("width"), DUI_T("36"));
+        pIconCell->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+        pIconCell->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
         pIconCell->SetMouseEnabled(false);
         pRow->AddItem(pIconCell);
         if (entry.isDir) {
@@ -441,33 +441,33 @@ void FilesForm::ReloadList()
 
         ui::Label* pName = new ui::Label(this);
         pName->SetText(entry.name);
-        pName->SetAttribute(_T("font"), _T("system_14"));
-        pName->SetAttribute(_T("text_color"),
+        pName->SetAttribute(DUI_T("font"), DUI_T("system_14"));
+        pName->SetAttribute(DUI_T("text_color"),
                             entry.isDir ? kAccent : kTextDark);
-        pName->SetAttribute(_T("text_align"), _T("left,vcenter"));
-        pName->SetAttribute(_T("width"), _T("stretch"));
-        pName->SetAttribute(_T("height"), _T("stretch"));
+        pName->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
+        pName->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        pName->SetAttribute(DUI_T("height"), DUI_T("stretch"));
         pName->SetMouseEnabled(false);
         pRow->AddItem(pName);
 
         ui::Label* pSize = new ui::Label(this);
-        pSize->SetText(entry.isDir ? _T("—") : FormatSize(entry.size));
-        pSize->SetAttribute(_T("font"), _T("system_12"));
-        pSize->SetAttribute(_T("text_color"), kTextHint);
-        pSize->SetAttribute(_T("text_align"), _T("right,vcenter"));
-        pSize->SetAttribute(_T("width"), _T("90"));
-        pSize->SetAttribute(_T("height"), _T("stretch"));
+        pSize->SetText(entry.isDir ? DUI_T("—") : FormatSize(entry.size));
+        pSize->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        pSize->SetAttribute(DUI_T("text_color"), kTextHint);
+        pSize->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+        pSize->SetAttribute(DUI_T("width"), DUI_T("90"));
+        pSize->SetAttribute(DUI_T("height"), DUI_T("stretch"));
         pSize->SetMouseEnabled(false);
         pRow->AddItem(pSize);
 
         ui::Label* pTime = new ui::Label(this);
         pTime->SetText(entry.mtime);
-        pTime->SetAttribute(_T("font"), _T("system_12"));
-        pTime->SetAttribute(_T("text_color"), kTextHint);
-        pTime->SetAttribute(_T("text_align"), _T("right,vcenter"));
-        pTime->SetAttribute(_T("width"), _T("150"));
-        pTime->SetAttribute(_T("margin"), _T("0,0,10,0"));
-        pTime->SetAttribute(_T("height"), _T("stretch"));
+        pTime->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        pTime->SetAttribute(DUI_T("text_color"), kTextHint);
+        pTime->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+        pTime->SetAttribute(DUI_T("width"), DUI_T("150"));
+        pTime->SetAttribute(DUI_T("margin"), DUI_T("0,0,10,0"));
+        pTime->SetAttribute(DUI_T("height"), DUI_T("stretch"));
         pTime->SetMouseEnabled(false);
         pRow->AddItem(pTime);
 
@@ -477,9 +477,9 @@ void FilesForm::ReloadList()
     if (m_pStatusLabel != nullptr) {
         // Finder-style status bar: item count.
         DString status = ui::StringUtil::Printf(
-            _T("%d 个项目"), dirCount + fileCount);
+            DUI_T("%d 个项目"), dirCount + fileCount);
         m_pStatusLabel->SetText(status);
-        m_pStatusLabel->SetAttribute(_T("text_color"), kTextHint);
+        m_pStatusLabel->SetAttribute(DUI_T("text_color"), kTextHint);
     }
 }
 
@@ -491,10 +491,10 @@ void FilesForm::UpdatePathLabel()
     // Finder shows the current folder name in the toolbar/title, not the
     // full POSIX path. "/" gets a friendly name.
     DString name = m_curDir;
-    if (name == _T("/")) {
-        name = _T("PolluxOS");
+    if (name == DUI_T("/")) {
+        name = DUI_T("PolluxOS");
     } else {
-        size_t pos = name.find_last_of(_T('/'));
+        size_t pos = name.find_last_of(DUI_T('/'));
         if (pos != DString::npos && pos + 1 < name.size()) {
             name = name.substr(pos + 1);
         }
@@ -504,23 +504,23 @@ void FilesForm::UpdatePathLabel()
 
 void FilesForm::ShellQuote(DString& arg)
 {
-    DString quoted = _T("'");
+    DString quoted = DUI_T("'");
     for (DString::value_type ch : arg) {
-        if (ch == _T('\'')) {
-            quoted += _T("'\\''");
+        if (ch == DUI_T('\'')) {
+            quoted += DUI_T("'\\''");
         } else {
             quoted.push_back(ch);
         }
     }
-    quoted += _T("'");
+    quoted += DUI_T("'");
     arg = quoted;
 }
 
 void FilesForm::OpenEntry(const Entry& entry)
 {
     DString full = m_curDir;
-    if (!full.empty() && full.back() != _T('/')) {
-        full += _T('/');
+    if (!full.empty() && full.back() != DUI_T('/')) {
+        full += DUI_T('/');
     }
     full += entry.name;
 
@@ -542,7 +542,7 @@ void FilesForm::OpenEntry(const Entry& entry)
 
     DString quoted = full;
     ShellQuote(quoted);
-    LaunchCommand(DString(_T("wayst -e vim ")) + quoted);
+    LaunchCommand(DString(DUI_T("wayst -e vim ")) + quoted);
 }
 
 void FilesForm::LaunchCommand(const DString& cmdline)

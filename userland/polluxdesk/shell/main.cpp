@@ -9,7 +9,7 @@
 class App : public ui::FrameworkThread
 {
 public:
-    App() : FrameworkThread(_T("App"), ui::kThreadUI) {}
+    App() : FrameworkThread(DUI_T("App"), ui::kThreadUI) {}
 
     void Run() { RunMessageLoop(); }
 
@@ -23,7 +23,7 @@ private:
             ui::MemoryResParam(GetEmbeddedResourcesData(), GetEmbeddedResourcesSize()));
 
         PolluxOSForm* window = new PolluxOSForm();
-        window->CreateWnd(nullptr, ui::WindowCreateParam(_T("PolluxOS Desktop"), true));
+        window->CreateWnd(nullptr, ui::WindowCreateParam(DUI_T("PolluxOS Desktop"), true));
         window->PostQuitMsgWhenClosed(true);
         window->ShowWindow(ui::kSW_SHOW_NORMAL);
     }
