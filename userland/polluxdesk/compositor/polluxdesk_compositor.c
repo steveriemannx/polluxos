@@ -1051,6 +1051,23 @@ static void focus_toplevel(struct polluxdesk_toplevel *toplevel) {
 	write_window_state(server);
 }
 
+/* Bring back a window the shell asked for by id, which is the pointer value
+ * published in state.conf. The shell has no protocol of its own to call, so
+ * the request arrives as a window title; see xdg_toplevel_set_title. */
+static void restore_minimized(struct polluxdesk_server *server,
+		unsigned long id) {
+	struct polluxdesk_toplevel *toplevel;
+	wl_list_for_each(toplevel, &server->toplevels, link) {
+		if ((unsigned long)toplevel != id) {
+			continue;
+		}
+		/* focus_toplevel() clears the minimized flag, re-enables the scene
+		 * node and raises the window, which is exactly a restore. */
+		focus_toplevel(toplevel);
+		return;
+	}
+}
+
 static void keyboard_handle_modifiers(
 		struct wl_listener *listener, void *data) {
 	/* This event is raised when a modifier key, such as shift or alt, is
@@ -1833,10 +1850,21 @@ static void xdg_toplevel_set_title(struct wl_listener *listener, void *data) {
 	(void)data;
 	struct polluxdesk_toplevel *toplevel = wl_container_of(listener, toplevel, set_title);
 	toplevel_update_shell_flags(toplevel);
-	bool menu_open = toplevel->is_desktop &&
-		toplevel->xdg_toplevel->title != NULL &&
-		strcmp(toplevel->xdg_toplevel->title, "PolluxOS Desktop (menu)") == 0;
+	const char *title = toplevel->xdg_toplevel->title;
+	bool menu_open = toplevel->is_desktop && title != NULL &&
+		strcmp(title, "PolluxOS Desktop (menu)") == 0;
 	server_update_desktop_menu_layer(toplevel->server, toplevel, menu_open);
+
+	/* The same one-way channel carries restore requests from the dock's
+	 * minimized-window shelf: the shell retitles itself to
+	 * "PolluxOS Desktop (restore:<id>)" and the compositor brings that window
+	 * back. The shell drops the marker on its next timer tick, so this runs
+	 * once per request rather than once per title change. */
+	if (toplevel->is_desktop && title != NULL &&
+			strncmp(title, "PolluxOS Desktop (restore:", 26) == 0) {
+		restore_minimized(toplevel->server,
+			strtoul(title + 26, NULL, 10));
+	}
 	if (toplevel->is_borderless && toplevel->xdg_toplevel->base->initialized) {
 		struct wlr_box output_box;
 		server_get_output_box(toplevel->server, &output_box);

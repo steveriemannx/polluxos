@@ -30,6 +30,9 @@ const DString kDockBg       = DUI_T("#E6FFFFFF");   // frosted dock
 const DString kDockBorder   = DUI_T("#4DFFFFFF");
 const DString kDockSeparator= DUI_T("#33000000");   // hairline before the trash
 const DString kDockDot      = DUI_T("#99000000");   // running-app indicator
+const DString kChipBg       = DUI_T("#1A000000");   // minimized-window chip
+const DString kChipBorder   = DUI_T("#26000000");
+const DString kChipHot      = DUI_T("#330A84FF");
 const DString kTextDark     = DUI_T("#FF1D1D1F");
 const DString kTextBody     = DUI_T("#FF3A3A3C");
 const DString kTextHint     = DUI_T("#FF8E8E93");
@@ -41,6 +44,18 @@ const int kMenuButtonCount = 6;
 const DString kMenuButtonText[kMenuButtonCount] = {
     DUI_T("文件"), DUI_T("编辑"), DUI_T("显示"), DUI_T("前往"), DUI_T("窗口"), DUI_T("帮助")
 };
+
+// Layout attributes are strings; this keeps the derived sizes readable.
+static DString Num(int value)
+{
+    return ui::StringUtil::Printf(DUI_T("%d"), value);
+}
+
+// "left,top,right,bottom" with equal horizontal margins.
+static DString MarginH(int px)
+{
+    return ui::StringUtil::Printf(DUI_T("%d,0,%d,0"), px, px);
+}
 
 } // namespace
 
@@ -571,9 +586,40 @@ void PolluxOSForm::BuildUi()
     m_pMenuPanel->SetVisible(false);
     pRoot->AddItem(m_pMenuPanel);
 
-    AttachMenuDismissHandlers();
+    if (!m_handlersAttached) {
+        // One-shot: the callbacks below are appended to the window's event
+        // list, so attaching them again on every rebuild would stack
+        // duplicates and make a menu close the moment it opened.
+        m_handlersAttached = true;
+        AttachMenuDismissHandlers();
+    }
 
     AttachBox(pRoot);
+
+    // The dots and chips all live in the tree that has just been replaced.
+    ApplyRunningIndicators();
+}
+
+void PolluxOSForm::RebuildUi()
+{
+    HideMenuPanel();
+
+    // AttachBox() destroys the old tree synchronously, so every pointer into
+    // it is dangling the moment BuildUi() runs again. Drop them first; the
+    // ones BuildUi() and BuildDock() recreate are reassigned there.
+    m_pMenuPanel = nullptr;
+    m_pAppButton = nullptr;
+    for (int i = 0; i < kMenuButtonCount; ++i) {
+        m_menuButtons[i] = nullptr;
+    }
+    m_pClockLabel = nullptr;
+    m_pDesktopClockLabel = nullptr;
+    m_pDesktopDateLabel = nullptr;
+    m_dockDots.clear();
+    m_minimizedSlots.clear();
+    m_minimizedIds.clear();
+
+    BuildUi();
 }
 
 void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
@@ -804,6 +850,29 @@ void PolluxOSForm::PollWindowState()
         m_windows.push_back(info);
     }
     ApplyRunningIndicators();
+    UpdateMinimizedShelf();
+}
+
+void PolluxOSForm::UpdateMinimizedShelf()
+{
+    std::vector<unsigned long> ids;
+    for (const WindowInfo& info : m_windows) {
+        if (info.minimized &&
+                ids.size() < static_cast<size_t>(kMinimizedSlots)) {
+            ids.push_back(info.id);
+        }
+    }
+    if (ids == m_shelfIds) {
+        return;   // nothing moved
+    }
+    m_shelfIds = ids;
+
+    // The shelf is built by BuildDock(), so a change to it means the dock has
+    // to be built again -- dui will not recompute a laid-out rect just
+    // because a control was resized afterwards. Rebuilding here would be a
+    // use-after-free (AttachBox deletes the tree synchronously and this runs
+    // from a state poll), so it is deferred to the next timer tick.
+    m_uiDirty = true;
 }
 
 bool PolluxOSForm::IsAppRunning(const char* exeList) const
@@ -863,18 +932,6 @@ static void SetRadius(ui::Control* pControl, int radius, bool interactive)
     }
     pControl->SetAttribute(DUI_T("border_round"),
         ui::StringUtil::Printf(DUI_T("%d,%d"), radius, radius));
-}
-
-// Layout attributes are strings; this keeps the derived sizes readable.
-static DString Num(int value)
-{
-    return ui::StringUtil::Printf(DUI_T("%d"), value);
-}
-
-// "left,top,right,bottom" with equal horizontal margins.
-static DString MarginH(int px)
-{
-    return ui::StringUtil::Printf(DUI_T("%d,0,%d,0"), px, px);
 }
 
 // The trash can, drawn out of dui primitives. The resource root is pinned to
@@ -1080,6 +1137,61 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
     pSeparator->SetMouseEnabled(false);
     pDock->AddItem(pSeparator);
 
+    // Minimized windows, between the separator and the trash as on macOS.
+    // One chip per minimized window, created at its full size right here.
+    // Resizing a control later does not make dui recompute its rect, and the
+    // rect is what the hit-test uses -- a chip that was laid out at zero
+    // width paints but can never be clicked. So the shelf is part of what a
+    // rebuild produces rather than something patched afterwards.
+    const int chipW = iconPx * 4 / 3;
+    const int chipH = iconPx * 9 / 16;
+    m_minimizedSlots.clear();
+    m_minimizedIds.clear();
+    for (const WindowInfo& info : m_windows) {
+        if (!info.minimized ||
+                static_cast<int>(m_minimizedSlots.size()) >= kMinimizedSlots) {
+            continue;
+        }
+        ui::Button* pChip = new ui::Button(this);
+        pChip->SetAttribute(DUI_T("width"), Num(chipW));
+        pChip->SetAttribute(DUI_T("height"), Num(chipH));
+        pChip->SetAttribute(DUI_T("margin"), MarginH(iconGap / 2));
+        // The dock centres a child by its own valign, not by the bar's
+        // child_align (that one only covers the horizontal axis in HLayout).
+        // Without this the chip sits against the top edge of the dock.
+        pChip->SetAttribute(DUI_T("valign"), DUI_T("center"));
+        pChip->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        pChip->SetAttribute(DUI_T("text_color"), kTextBody);
+        pChip->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
+        pChip->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pChip->SetBkColor(kChipBg);
+        pChip->SetBorderColor(ui::kControlStateNormal, kChipBorder);
+        pChip->SetBorderColor(ui::kControlStateHot, kAccent);
+        pChip->SetAttribute(DUI_T("border_size"), DUI_T("1"));
+        SetRadius(pChip, std::max(4, iconPx / 8), true);
+        // dui ellipsizes the title when it does not fit.
+        pChip->SetText(DString(info.title.c_str()));
+        pChip->SetToolTipText(DString(info.title.c_str()));
+
+        const size_t index = m_minimizedIds.size();
+        m_minimizedIds.push_back(info.id);
+        pChip->AttachClick([this, index](const ui::EventArgs& /*args*/) {
+            HideMenuPanel();
+            if (index < m_minimizedIds.size() && m_minimizedIds[index] != 0) {
+                // The shell's window title is the only channel it has to the
+                // compositor; see the restore handling there. The marker is
+                // cleared on the next tick so the two title changes cannot
+                // coalesce into one commit.
+                SetText(ui::StringUtil::Printf(
+                    DUI_T("PolluxOS Desktop (restore:%lu)"), m_minimizedIds[index]));
+                m_titleMarkerPending = true;
+            }
+            return true;
+        });
+        pDock->AddItem(pChip);
+        m_minimizedSlots.push_back(pChip);
+    }
+
     ui::ButtonVBox* pTrash = MakeTrashTile(this, iconPx);
     pTrash->SetAttribute(DUI_T("margin"), MarginH(iconGap));
     pTrash->AttachClick([this](const ui::EventArgs& /*args*/) {
@@ -1113,6 +1225,18 @@ void PolluxOSForm::UpdateClock()
     // Runs before the clock-label guard below so the dock keeps tracking
     // running apps even if no clock label was ever built.
     PollWindowState();
+
+    if (m_titleMarkerPending) {
+        // A tick after the restore request, so the compositor is certain to
+        // have seen it as its own title change.
+        m_titleMarkerPending = false;
+        SetText(DUI_T("PolluxOS Desktop"));
+    }
+
+    if (m_uiDirty) {
+        m_uiDirty = false;
+        RebuildUi();
+    }
 
     if (m_pClockLabel == nullptr && m_pDesktopClockLabel == nullptr &&
         m_pDesktopDateLabel == nullptr) {

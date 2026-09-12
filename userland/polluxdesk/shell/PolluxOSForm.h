@@ -56,6 +56,12 @@ public:
 
 private:
     void BuildUi();
+
+    /** Tear the control tree down and build it again so layout is recomputed
+     *  from scratch. Only ever called from the clock timer: AttachBox
+     *  deletes the previous tree synchronously, which would be a
+     *  use-after-free inside an event handler. */
+    void RebuildUi();
     void BuildMenuBar(ui::VBox* pRoot);
     void BuildDesktopArea(ui::VBox* pRoot);
     void BuildDock(ui::VBox* pRoot);
@@ -83,6 +89,11 @@ private:
     void PollWindowState();
     void ApplyRunningIndicators();
     bool IsAppRunning(const char* exeList) const;
+
+    /** Repopulate the shelf of minimized windows in the dock. Chips are
+     *  created once with the dock and only shown, hidden and relabelled, so
+     *  a window being minimized never rebuilds the shell. */
+    void UpdateMinimizedShelf();
 
     void LaunchApp(const char* cmdline);
 
@@ -155,6 +166,24 @@ private:
     // persist across state changes; only their colour is repainted, so an app
     // starting never rebuilds the dock.
     std::vector<ui::Control*> m_dockDots;
+
+    // Minimized windows: a chip each, between the separator and the trash.
+    // Clicking one asks the compositor to bring that window back.
+    static const int kMinimizedSlots = 4;
+    std::vector<ui::Button*>   m_minimizedSlots;
+    std::vector<unsigned long> m_minimizedIds;   // window id per slot; 0 = empty
+    std::vector<unsigned long> m_shelfIds;       // last applied set
+    // The restore request travels as the window title; the marker is cleared
+    // on the next timer tick rather than immediately, because two SetText
+    // calls in the same handler can coalesce into one commit and the
+    // compositor would never see the request.
+    bool m_titleMarkerPending = false;
+    // Set when something the dock has to draw differently has changed, so the
+    // rebuild happens on the next timer tick rather than where it was noticed.
+    bool m_uiDirty = false;
+    // Window-level dismiss callbacks append rather than replace, so attaching
+    // them once per rebuild would stack duplicates and close menus instantly.
+    bool m_handlersAttached = false;
 
     ui::Label* m_pClockLabel = nullptr;
     ui::Label* m_pDesktopClockLabel = nullptr;
