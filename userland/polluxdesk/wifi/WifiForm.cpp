@@ -453,6 +453,9 @@ void WifiForm::FillConnectBar()
         m_pShowButton->SetAttribute(DUI_T("margin"), DUI_T("0,0,10,0"));
         m_pShowButton->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
         m_pShowButton->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        // Without this, clicking 显示 moves the caret out of the field and the
+        // next keystroke goes to the button.
+        m_pShowButton->SetNoFocus();
         m_pShowButton->SetStateColor(ui::kControlStateNormal, m_pal.rowHot);
         m_pShowButton->SetStateColor(ui::kControlStateHot, m_pal.rowSelected);
         m_pShowButton->SetStateTextColor(ui::kControlStateNormal, m_pal.textBody);
@@ -693,11 +696,15 @@ void WifiForm::SelectNetwork(const std::string& ssid)
             break;
         }
     }
+    // The caret belongs in the field whenever there is one: a saved network's
+    // key can be replaced, and typing into a field that was not focused went
+    // nowhere at all.
+    if (m_pPassword != nullptr) {
+        m_pPassword->SetFocus();
+    }
     if (network != nullptr && network->secured && !network->saved &&
         m_status.ssid != ssid) {
-        // A network we have no key for: the field is what is wanted next.
         m_pPassword->SetText(DUI_T(""));
-        m_pPassword->SetFocus();
         SetHint(DUI_T("输入 Wi-Fi 密码后点连接（也可以直接按回车）"), false);
     } else if (network != nullptr && network->saved && m_status.ssid != ssid) {
         SetHint(DUI_T("已保存的网络，直接点连接即可"), false);
