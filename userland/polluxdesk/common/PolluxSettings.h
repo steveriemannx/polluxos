@@ -68,6 +68,16 @@ inline std::string ConfigPath() { return ConfigDir() + "/settings.conf"; }
 inline std::string StatePath()  { return ConfigDir() + "/state.conf"; }
 // Written by the compositor: the output modes the display panel lists.
 inline std::string OutputsPath(){ return ConfigDir() + "/outputs.conf"; }
+// Window thumbnails for the dock's minimized shelf, one PNG per window id.
+inline std::string ThumbDir()   { return ConfigDir() + "/thumbs"; }
+inline std::string ThumbPath(unsigned long id) {
+    return ThumbDir() + "/" + std::to_string(id) + ".png";
+}
+
+inline bool FileExists(const std::string& path) {
+    struct stat st;
+    return ::stat(path.c_str(), &st) == 0;
+}
 
 // ---------------------------------------------------------------------------
 // Small helpers

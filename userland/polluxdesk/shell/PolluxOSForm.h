@@ -104,6 +104,10 @@ private:
      *  a window being minimized never rebuilds the shell. */
     void UpdateMinimizedShelf();
 
+    /** Capture the window the compositor is holding on screen for us and
+     *  tell it the pixels are safely in a file. */
+    void GrabPendingThumbnail();
+
     void LaunchApp(const char* cmdline);
 
     void ToggleMenu(int menuIndex);
@@ -150,6 +154,7 @@ private:
         const char* cmd;     // shell command
         const char* exe;     // executable names that light the running dot,
                              // "|"-separated; empty for tiles that never do
+        int         group;   // dock section; a divider is drawn between groups
     } kDockApps[];
 
     ui::VBox*    m_pMenuPanel = nullptr;
@@ -188,6 +193,12 @@ private:
     // calls in the same handler can coalesce into one commit and the
     // compositor would never see the request.
     bool m_titleMarkerPending = false;
+
+    // Published by the compositor while it keeps a just-minimized window on
+    // screen: the rectangle to grab before it is hidden.
+    bool          m_thumbPending = false;
+    unsigned long m_thumbId = 0;
+    int           m_thumbX = 0, m_thumbY = 0, m_thumbW = 0, m_thumbH = 0;
     // Set when something the dock has to draw differently has changed, so the
     // rebuild happens on the next timer tick rather than where it was noticed.
     bool m_uiDirty = false;

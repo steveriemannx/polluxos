@@ -157,6 +157,10 @@ struct polluxdesk_toplevel {
 	bool client_side_decorated;
 	bool alpha_debugged;
 	bool minimized;
+	/* Set between a minimize and the shell reporting that it has grabbed
+	 * the window's pixels; the window stays on screen for that long. */
+	bool pending_thumb;
+	struct timespec thumb_since;
 	struct wlr_xdg_toplevel_decoration_v1 *decoration;
 	bool maximized;
 	bool menu_open;      /* desktop shell dropdown is visible */
@@ -894,6 +898,15 @@ static void write_window_state(struct polluxdesk_server *server) {
 			}
 		}
 
+		if (toplevel->pending_thumb) {
+			/* Where the shell should point grim. The window is still on
+			 * screen at this moment, which is the whole point. */
+			struct wlr_box box;
+			toplevel_visible_box(toplevel, &box);
+			fprintf(file, "thumb=%lu|%d|%d|%d|%d\n",
+				(unsigned long)toplevel,
+				box.x, box.y, box.width, box.height);
+		}
 		fprintf(file, "win=%lu|%s|%s|%d|%d|%d|%d|%ld\n",
 			(unsigned long)toplevel,
 			app_id,
@@ -946,9 +959,36 @@ static void minimize_toplevel(struct polluxdesk_toplevel *toplevel) {
 		return;
 	}
 	toplevel->minimized = true;
-	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
+	/* The window stays on screen for one exchange. Its thumbnail has to come
+	 * from somewhere: handing the shell a texture would need a protocol
+	 * neither side has, and rendering the window offscreen here would mean
+	 * reading pixels back off the GPU -- a much bigger job for the same
+	 * picture. So the shell grabs the window's rectangle out of the
+	 * composited output with grim and says when it has it, and only then is
+	 * the window hidden. */
+	toplevel->pending_thumb = true;
+	clock_gettime(CLOCK_MONOTONIC, &toplevel->thumb_since);
 	wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, false);
 	write_window_state(toplevel->server);
+}
+
+/* Hide a minimized window whose thumbnail has been taken. */
+static void toplevel_finish_thumb(struct polluxdesk_toplevel *toplevel) {
+	toplevel->pending_thumb = false;
+	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
+}
+
+static void finish_pending_thumb(struct polluxdesk_server *server,
+		unsigned long id) {
+	struct polluxdesk_toplevel *toplevel;
+	wl_list_for_each(toplevel, &server->toplevels, link) {
+		if ((unsigned long)toplevel != id || !toplevel->pending_thumb) {
+			continue;
+		}
+		toplevel_finish_thumb(toplevel);
+		write_window_state(server);
+		return;
+	}
 }
 
 static void update_background(struct polluxdesk_output *output) {
@@ -998,6 +1038,9 @@ static void focus_toplevel(struct polluxdesk_toplevel *toplevel) {
 	}
 	if (toplevel->minimized) {
 		toplevel->minimized = false;
+		/* Restored before the shell got round to the grab: the window is
+		 * wanted back, so there is nothing left to hide. */
+		toplevel->pending_thumb = false;
 		wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
 	}
 	struct polluxdesk_server *server = toplevel->server;
@@ -1720,6 +1763,21 @@ static void output_frame(struct wl_listener *listener, void *data) {
 	 * generally at the output's refresh rate (e.g. 60Hz). */
 	struct polluxdesk_output *output = wl_container_of(listener, output, frame);
 	struct wlr_scene *scene = output->server->scene;
+	/* A shell that died mid-grab would otherwise leave the window stranded
+	 * on screen forever, so the wait is bounded. */
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	struct polluxdesk_toplevel *waiting;
+	wl_list_for_each(waiting, &output->server->toplevels, link) {
+		if (!waiting->pending_thumb) {
+			continue;
+		}
+		if (now.tv_sec - waiting->thumb_since.tv_sec >= 2) {
+			toplevel_finish_thumb(waiting);
+			write_window_state(output->server);
+		}
+	}
+
 	if (g_settings_reload) {
 		g_settings_reload = 0;
 		reload_user_settings(output->server);
@@ -1864,6 +1922,12 @@ static void xdg_toplevel_set_title(struct wl_listener *listener, void *data) {
 			strncmp(title, "PolluxOS Desktop (restore:", 26) == 0) {
 		restore_minimized(toplevel->server,
 			strtoul(title + 26, NULL, 10));
+	}
+	/* The shell has the thumbnail; the window can come down now. */
+	if (toplevel->is_desktop && title != NULL &&
+			strncmp(title, "PolluxOS Desktop (thumb-ready:", 30) == 0) {
+		finish_pending_thumb(toplevel->server,
+			strtoul(title + 30, NULL, 10));
 	}
 	if (toplevel->is_borderless && toplevel->xdg_toplevel->base->initialized) {
 		struct wlr_box output_box;

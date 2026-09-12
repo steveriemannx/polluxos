@@ -7,6 +7,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <csignal>
+#include <string>
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #include <sys/user.h>
@@ -224,11 +225,11 @@ const int PolluxOSForm::kQuickMenuCount =
 // Like macOS, the dock shows icons only - names are tooltips.
 // An empty `cmd` is the Launchpad tile: clicking opens the in-shell app grid.
 const PolluxOSForm::DockApp PolluxOSForm::kDockApps[] = {
-    { "终端",   ">_",  "polluxdesk/icons/terminal.svg", "#FF4C9FDB", "#FF2E6FA3", "wayst", "wayst" },
-    { "启动台", "⊞",   "polluxdesk/icons/apps.svg", "#FF8E7CC3", "#FF5F4B8B", "", "" },
-    { "文件",   "~",   "polluxdesk/icons/files.svg", "#FFF0A35C", "#FFC97A2B", "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_files\" 2>/dev/null || wayst -e sh -c 'echo 未安装 polluxdesk_files; read _'", "polluxdesk_files" },
-    { "浏览器", "@",   "polluxdesk/icons/browser.svg", "#FF5AA9E6", "#FF2F6FAB", "wayst -e sh -c 'firefox 2>/dev/null || chromium 2>/dev/null || (echo \"未安装浏览器\"; sleep 2)'", "firefox|chromium|chrome" },
-    { "设置",   "*",   "polluxdesk/icons/settings.svg", "#FF9AA4B0", "#FF6B7580", "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_settings\"", "polluxdesk_settings" },
+    { "终端",   ">_",  "polluxdesk/icons/terminal.svg", "#FF4C9FDB", "#FF2E6FA3", "wayst", "wayst", 0 },
+    { "启动台", "⊞",   "polluxdesk/icons/apps.svg", "#FF8E7CC3", "#FF5F4B8B", "", "", 0 },
+    { "文件",   "~",   "polluxdesk/icons/files.svg", "#FFF0A35C", "#FFC97A2B", "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_files\" 2>/dev/null || wayst -e sh -c 'echo 未安装 polluxdesk_files; read _'", "polluxdesk_files", 0 },
+    { "浏览器", "@",   "polluxdesk/icons/browser.svg", "#FF5AA9E6", "#FF2F6FAB", "wayst -e sh -c 'firefox 2>/dev/null || chromium 2>/dev/null || (echo \"未安装浏览器\"; sleep 2)'", "firefox|chromium|chrome", 0 },
+    { "设置",   "*",   "polluxdesk/icons/settings.svg", "#FF9AA4B0", "#FF6B7580", "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_settings\"", "polluxdesk_settings", 1 },
 };
 
 PolluxOSForm::PolluxOSForm()
@@ -279,6 +280,12 @@ void PolluxOSForm::OnInitWindow()
     // The wlroots compositor owns every shadow and titlebar; the shell
     // surface itself must stay borderless and shadowless.
     SetShadowAttached(false);
+    // Thumbnails are named after window pointers, so a stale one from an
+    // earlier session could be shown against an unrelated window. Start
+    // clean; live windows re-grab as they are minimized.
+    const std::string thumbClean =
+        "rm -f '" + pollux::ThumbDir() + "'/*.png 2>/dev/null";
+    pollux::Run(thumbClean.c_str());
     m_settings = pollux::Load();
     m_settingsMtime = pollux::MtimeNs(pollux::ConfigPath());
     ApplyAppearance();
@@ -960,7 +967,22 @@ void PolluxOSForm::PollWindowState()
         return;
     }
 
+    m_thumbPending = false;
     for (const std::string& line : lines) {
+        if (line.compare(0, 6, "thumb=") == 0) {
+            // id|x|y|width|height -- a minimized window the compositor is
+            // still showing while we take its picture.
+            const std::vector<std::string> f = SplitFields(line.substr(6), '|');
+            if (f.size() >= 5) {
+                m_thumbId = std::strtoul(f[0].c_str(), nullptr, 10);
+                m_thumbX = std::atoi(f[1].c_str());
+                m_thumbY = std::atoi(f[2].c_str());
+                m_thumbW = std::atoi(f[3].c_str());
+                m_thumbH = std::atoi(f[4].c_str());
+                m_thumbPending = m_thumbW > 0 && m_thumbH > 0;
+            }
+            continue;
+        }
         if (line.compare(0, 4, "win=") != 0) {
             continue;
         }
@@ -1005,6 +1027,35 @@ void PolluxOSForm::UpdateMinimizedShelf()
     // use-after-free (AttachBox deletes the tree synchronously and this runs
     // from a state poll), so it is deferred to the next timer tick.
     m_uiDirty = true;
+}
+
+void PolluxOSForm::GrabPendingThumbnail()
+{
+    if (!m_thumbPending) {
+        return;
+    }
+    // One attempt per request: if grim fails the window simply gets a plain
+    // chip instead of a picture, which is better than retrying at it.
+    m_thumbPending = false;
+
+    const unsigned long id = m_thumbId;
+    pollux::MkdirP(pollux::ThumbDir());
+    const std::string path = pollux::ThumbPath(id);
+
+    // grim reads the composited output, so the rectangle the compositor
+    // published is exactly what it wants.
+    const std::string cmd = "grim -g \"" + std::to_string(m_thumbX) + "," +
+        std::to_string(m_thumbY) + " " + std::to_string(m_thumbW) + "x" +
+        std::to_string(m_thumbH) + "\" '" + path + "' 2>/dev/null";
+    // Deliberately synchronous: the compositor is holding the window on
+    // screen until we answer, so the grab has to be finished first. It costs
+    // a fraction of a second, once, on a click that was going to hide the
+    // window anyway.
+    pollux::Run(cmd.c_str());
+
+    SetText(ui::StringUtil::Printf(DUI_T("PolluxOS Desktop (thumb-ready:%lu)"), id));
+    m_titleMarkerPending = true;
+    m_uiDirty = true;   // the shelf can show the picture on the next build
 }
 
 bool PolluxOSForm::IsAppRunning(const char* exeList) const
@@ -1201,9 +1252,31 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
     const int dotLaneH = std::max(5, iconPx / 8);
     const int dotSize  = std::max(3, iconPx / 14);
 
+    // A hairline between dock sections. macOS shows two of them -- one
+    // between the everyday apps and the rest, one before the minimized
+    // windows and the trash -- which is what gives the Dock its three groups.
+    auto AddDockDivider = [this, pDock, iconPx, iconGap]() {
+        ui::Control* pDivider = new ui::Control(this);
+        pDivider->SetAttribute(DUI_T("width"), DUI_T("1"));
+        pDivider->SetAttribute(DUI_T("height"), Num(iconPx * 62 / 100));
+        pDivider->SetAttribute(DUI_T("margin"),
+            ui::StringUtil::Printf(DUI_T("%d,0,%d,0"), iconGap + 3, iconGap + 3));
+        pDivider->SetBkColor(g_pal.dockSeparator);
+        pDivider->SetMouseEnabled(false);
+        pDock->AddItem(pDivider);
+    };
+
     m_dockDots.clear();
+    int lastGroup = -1;
     const int kDockCount = static_cast<int>(sizeof(kDockApps) / sizeof(kDockApps[0]));
     for (int i = 0; i < kDockCount; ++i) {
+        if (kDockApps[i].group != lastGroup) {
+            if (lastGroup >= 0) {
+                AddDockDivider();
+            }
+            lastGroup = kDockApps[i].group;
+        }
+
         // One icon tile per app; the label is a tooltip, macOS style.
         ui::Button* pIcon = new ui::Button(this);
         pIcon->SetText(DString(kDockApps[i].glyph));
@@ -1265,13 +1338,7 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
     // then the trash. The bar is centered by its full contents, so adding
     // these shifts the whole row half their width to the left -- which is
     // what the real Dock does too.
-    ui::Control* pSeparator = new ui::Control(this);
-    pSeparator->SetAttribute(DUI_T("width"), DUI_T("1"));
-    pSeparator->SetAttribute(DUI_T("height"), Num(iconPx * 62 / 100));
-    pSeparator->SetAttribute(DUI_T("margin"), DUI_T("7,0,7,0"));
-    pSeparator->SetBkColor(g_pal.dockSeparator);
-    pSeparator->SetMouseEnabled(false);
-    pDock->AddItem(pSeparator);
+    AddDockDivider();
 
     // Minimized windows, between the separator and the trash as on macOS.
     // One chip per minimized window, created at its full size right here.
@@ -1279,8 +1346,9 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
     // rect is what the hit-test uses -- a chip that was laid out at zero
     // width paints but can never be clicked. So the shelf is part of what a
     // rebuild produces rather than something patched afterwards.
-    const int chipW = iconPx * 4 / 3;
-    const int chipH = iconPx * 9 / 16;
+    // Thumbnail-shaped, as the Dock's minimized windows are.
+    const int chipH = iconPx + 4;
+    const int chipW = chipH * 8 / 5;
     m_minimizedSlots.clear();
     m_minimizedIds.clear();
     for (const WindowInfo& info : m_windows) {
@@ -1305,9 +1373,22 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
         pChip->SetBorderColor(ui::kControlStateHot, g_pal.accent);
         pChip->SetAttribute(DUI_T("border_size"), DUI_T("1"));
         SetRadius(pChip, std::max(4, iconPx / 8), true);
-        // dui ellipsizes the title when it does not fit.
-        pChip->SetText(DString(info.title.c_str()));
         pChip->SetToolTipText(DString(info.title.c_str()));
+
+        const std::string shot = pollux::ThumbPath(info.id);
+        if (pollux::FileExists(shot)) {
+            // A picture of the window, taken while the compositor was still
+            // holding it on screen. Scaled to the chip, which keeps the
+            // window's proportions because grim grabbed its real rectangle.
+            DString spec = DString(DUI_T("file='")) + DString(shot.c_str()) +
+                DUI_T("' width='") + Num(chipW - 4) + DUI_T("' height='") +
+                Num(chipH - 4) + DUI_T("' halign='center' valign='center'");
+            pChip->SetBkImage(spec);
+        } else {
+            // No picture (the grab failed, or did not happen): the title is
+            // still worth showing, and dui ellipsizes it if it does not fit.
+            pChip->SetText(DString(info.title.c_str()));
+        }
 
         const size_t index = m_minimizedIds.size();
         m_minimizedIds.push_back(info.id);
@@ -1353,7 +1434,7 @@ void PolluxOSForm::StartClock()
     constexpr int32_t kRepeatForSession = 0x7FFFFFFF;
     m_clockTimerId = ui::GlobalManager::Instance().Timer().AddTimer(GetWeakFlag(), [this]() {
         UpdateClock();
-    }, 1000, kRepeatForSession);
+    }, 250, kRepeatForSession);
 }
 
 void PolluxOSForm::UpdateClock()
@@ -1363,11 +1444,13 @@ void PolluxOSForm::UpdateClock()
     PollWindowState();
 
     if (m_titleMarkerPending) {
-        // A tick after the restore request, so the compositor is certain to
-        // have seen it as its own title change.
+        // A tick after the request, so the compositor is certain to have seen
+        // it as its own title change.
         m_titleMarkerPending = false;
         SetText(DUI_T("PolluxOS Desktop"));
     }
+
+    GrabPendingThumbnail();
 
     PollSettings();
 
@@ -1391,9 +1474,12 @@ void PolluxOSForm::UpdateClock()
                   tm_now.tm_mon + 1, tm_now.tm_mday,
                   tm_now.tm_hour, tm_now.tm_min);
 
-    if (m_pBatteryLabel != nullptr) {
-        // A real reading, refreshed at the same cadence as the clock. Empty
-        // when the machine reports no battery at all.
+    // The clock ticks four times a second so a minimize is not left waiting
+    // on it; shelling out four times a second would be silly, so the reading
+    // is only taken every few seconds.
+    static int batteryTick = 0;
+    if (m_pBatteryLabel != nullptr && ++batteryTick >= 20) {
+        batteryTick = 0;
         std::string life = pollux::Run("sysctl -n hw.acpi.battery.life 2>/dev/null");
         while (!life.empty() && (life.back() == '\n' || life.back() == ' ')) {
             life.pop_back();
