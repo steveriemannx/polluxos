@@ -48,6 +48,11 @@ struct Palette
     DString accent;
     DString danger;
     DString transparent;
+    // Which status-glyph set to load. dui cannot tint an SVG, so each glyph
+    // ships in a dark and a light version and the shell picks one.
+    DString glyphVariant;
+    DString dockCanBody;    // trash-can fill, translucent like the reference
+    DString dockCanEdge;
 };
 
 Palette g_pal;
@@ -69,6 +74,11 @@ void BuildPalette(const pollux::Settings& settings)
 
     g_pal.transparent  = DUI_T("#00000000");
     g_pal.accent       = accent;
+    g_pal.glyphVariant = dark ? DUI_T("white") : DUI_T("black");
+    // A light can would vanish on the light dock and a dark one on the dark
+    // dock, so the can follows the appearance the way macOS's does.
+    g_pal.dockCanBody  = dark ? DUI_T("#D9F2F2F5") : DUI_T("#E6F7F7FA");
+    g_pal.dockCanEdge  = dark ? DUI_T("#8CFFFFFF") : DUI_T("#5E000000");
     g_pal.danger       = DUI_T("#FFFF453A");
     // Same accent, washed out -- one source of truth for the highlight colour.
     g_pal.barHot       = AccentWash(accent, "22");
@@ -80,9 +90,9 @@ void BuildPalette(const pollux::Settings& settings)
         g_pal.barBorder    = DUI_T("#26FFFFFF");
         g_pal.menuPanelBg  = DUI_T("#F21C1C1E");
         g_pal.menuPanelLine= DUI_T("#26FFFFFF");
-        g_pal.dockBg       = DUI_T("#CC1C1C1E");
-        g_pal.dockBorder   = DUI_T("#26FFFFFF");
-        g_pal.dockSeparator= DUI_T("#33FFFFFF");
+        g_pal.dockBg       = DUI_T("#B81C1C1E");
+        g_pal.dockBorder   = DUI_T("#2EFFFFFF");
+        g_pal.dockSeparator= DUI_T("#59FFFFFF");
         g_pal.dockDot      = DUI_T("#B3FFFFFF");
         g_pal.chipBg       = DUI_T("#26FFFFFF");
         g_pal.chipBorder   = DUI_T("#33FFFFFF");
@@ -94,9 +104,9 @@ void BuildPalette(const pollux::Settings& settings)
         g_pal.barBorder    = DUI_T("#33000000");
         g_pal.menuPanelBg  = DUI_T("#F5FFFFFF");
         g_pal.menuPanelLine= DUI_T("#33000000");
-        g_pal.dockBg       = DUI_T("#E6FFFFFF");
-        g_pal.dockBorder   = DUI_T("#4DFFFFFF");
-        g_pal.dockSeparator= DUI_T("#33000000");
+        g_pal.dockBg       = DUI_T("#C9FFFFFF");
+        g_pal.dockBorder   = DUI_T("#59FFFFFF");
+        g_pal.dockSeparator= DUI_T("#3D000000");
         g_pal.dockDot      = DUI_T("#99000000");
         g_pal.chipBg       = DUI_T("#1A000000");
         g_pal.chipBorder   = DUI_T("#26000000");
@@ -808,43 +818,68 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     pTopSpacer->SetAttribute(DUI_T("mouse_enabled"), DUI_T("false"));
     pTopBar->AddItem(pTopSpacer);
 
-    m_pClockLabel = new ui::Label(this);
-    m_pClockLabel->SetAttribute(DUI_T("font"), DUI_T("system_12"));
-    m_pClockLabel->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
-    m_pClockLabel->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
-    m_pClockLabel->SetAttribute(DUI_T("width"), DUI_T("200"));
-    m_pClockLabel->SetText(DUI_T("--月--日 周- --:--"));
-    pTopBar->AddItem(m_pClockLabel);
+    // Status glyphs, as macOS has them: small monochrome icons rather than
+    // words. dui cannot tint an SVG, so each ships in a light and a dark
+    // version and the palette says which to load.
+    auto AddStatusGlyph = [this, pTopBar](const char* glyph) {
+        ui::Label* pGlyph = new ui::Label(this);
+        pGlyph->SetAttribute(DUI_T("width"), DUI_T("38"));
+        pGlyph->SetAttribute(DUI_T("height"), DUI_T("24"));
+        pGlyph->SetBkImage(DString(DUI_T("file='polluxdesk/icons/status_")) + glyph +
+                           DUI_T("_") + g_pal.glyphVariant +
+                           DUI_T(".svg' width='30' height='19' halign='center' valign='center'"));
+        pGlyph->SetMouseEnabled(false);
+        pTopBar->AddItem(pGlyph);
+    };
 
-    // macOS-style status cluster on the right side of the desktop bar.
-    const DString statusText[] = { DUI_T("网络"), DUI_T("音量"), DUI_T("电量 100%") };
-    for (const DString& text : statusText) {
-        ui::Label* status = new ui::Label(this);
-        status->SetText(text);
-        status->SetAttribute(DUI_T("font"), DUI_T("system_12"));
-        status->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
-        status->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
-        status->SetAttribute(DUI_T("width"), DUI_T("58"));
-        status->SetAttribute(DUI_T("height"), DUI_T("24"));
-        status->SetMouseEnabled(false);
-        pTopBar->AddItem(status);
-    }
+    AddStatusGlyph("wifi");
+    AddStatusGlyph("volume");
+    AddStatusGlyph("battery");
+
+    // The reading sits against its own glyph, the way macOS shows it when the
+    // percentage is switched on.
+    m_pBatteryLabel = new ui::Label(this);
+    m_pBatteryLabel->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+    m_pBatteryLabel->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
+    m_pBatteryLabel->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
+    m_pBatteryLabel->SetAttribute(DUI_T("width"), DUI_T("42"));
+    m_pBatteryLabel->SetAttribute(DUI_T("height"), DUI_T("24"));
+    m_pBatteryLabel->SetText(DUI_T("--%"));
+    m_pBatteryLabel->SetMouseEnabled(false);
+    pTopBar->AddItem(m_pBatteryLabel);
+
+    AddStatusGlyph("search");
+
     ui::Button* controlCenter = new ui::Button(this);
-    controlCenter->SetText(DUI_T("控制中心"));
-    controlCenter->SetAttribute(DUI_T("font"), DUI_T("system_12"));
-    controlCenter->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
     controlCenter->SetAttribute(DUI_T("height"), DUI_T("24"));
-    controlCenter->SetAttribute(DUI_T("width"), DUI_T("78"));
-    controlCenter->SetAttribute(DUI_T("margin"), DUI_T("0,3,0,3"));
+    controlCenter->SetAttribute(DUI_T("width"), DUI_T("40"));
+    controlCenter->SetAttribute(DUI_T("margin"), DUI_T("4,3,4,3"));
+    controlCenter->SetBkImage(DString(DUI_T("file='polluxdesk/icons/status_controlcenter_")) +
+                              g_pal.glyphVariant +
+                              DUI_T(".svg' width='27' height='17' halign='center' valign='center'"));
     controlCenter->SetStateColor(ui::kControlStateNormal, g_pal.transparent);
     controlCenter->SetStateColor(ui::kControlStateHot, g_pal.barHot);
+    controlCenter->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
+    controlCenter->SetStateColorRound(ui::kControlStateHot, ui::UiSize(5, 5), false);
     controlCenter->SetAttribute(DUI_T("border_round"), DUI_T("5,5"));
     controlCenter->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+    controlCenter->SetToolTipText(DUI_T("系统设置"));
     controlCenter->AttachClick([this](const ui::EventArgs&) {
         LaunchApp("\"" POLLUX_BIN "/polluxdesk_settings\"");
         return true;
     });
     pTopBar->AddItem(controlCenter);
+
+    // The clock is last, at the very right edge, as on macOS.
+    m_pClockLabel = new ui::Label(this);
+    m_pClockLabel->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+    m_pClockLabel->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
+    m_pClockLabel->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+    m_pClockLabel->SetAttribute(DUI_T("width"), DUI_T("160"));
+    m_pClockLabel->SetAttribute(DUI_T("margin"), DUI_T("0,0,8,0"));
+    m_pClockLabel->SetText(DUI_T("--月--日 周- --:--"));
+    m_pClockLabel->SetMouseEnabled(false);
+    pTopBar->AddItem(m_pClockLabel);
 }
 
 void PolluxOSForm::BuildDesktopArea(ui::VBox* pRoot)
@@ -1043,13 +1078,17 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
     // Every part is a fraction of the tile so the can scales with it.
     const auto scale = [size](int num, int den) { return size * num / den; };
 
+    // macOS draws the trash as a translucent can standing on the dock, with
+    // no tile behind it -- so this one follows the appearance instead of
+    // carrying the Settings tile's grey.
+    const DString canBody   = g_pal.dockCanBody;
+    const DString canEdge   = g_pal.dockCanEdge;
+
     ui::ButtonVBox* pTile = new ui::ButtonVBox(pWindow);
     pTile->SetAttribute(DUI_T("height"), Num(size));
     pTile->SetAttribute(DUI_T("width"), Num(size));
-    pTile->SetBkColor(DUI_T("#FF9AA4B0"));
-    pTile->SetBkColor2(DUI_T("#FF6B7580"));
-    pTile->SetBkColor2Direction(DUI_T("1"));   // left -> right gradient
-    pTile->SetBorderColor(ui::kControlStateNormal, DUI_T("#FF6B7580"));
+    pTile->SetBkColor(g_pal.transparent);
+    pTile->SetBorderColor(ui::kControlStateNormal, g_pal.transparent);
     pTile->SetBorderColor(ui::kControlStateHot, g_pal.accent);
     pTile->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
     pTile->SetToolTipText(DUI_T("废纸篓"));
@@ -1073,7 +1112,7 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
     pHandle->SetAttribute(DUI_T("halign"), DUI_T("center"));
     pHandle->SetAttribute(DUI_T("width"), Num(scale(10, 56)));
     pHandle->SetAttribute(DUI_T("height"), Num(handleH));
-    pHandle->SetBkColor(DUI_T("#FFF2F2F4"));
+    pHandle->SetBkColor(canBody);
     pHandle->SetMouseEnabled(false);
     SetRadius(pHandle, std::max(1, handleH / 2), false);
     pTile->AddItem(pHandle);
@@ -1082,8 +1121,8 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
     pLid->SetAttribute(DUI_T("halign"), DUI_T("center"));
     pLid->SetAttribute(DUI_T("width"), Num(scale(26, 56)));
     pLid->SetAttribute(DUI_T("height"), Num(lidH));
-    pLid->SetBkColor(DUI_T("#FFFFFFFF"));
-    pLid->SetBorderColor(DUI_T("#FFB4B4BA"));
+    pLid->SetBkColor(canBody);
+    pLid->SetBorderColor(canEdge);
     pLid->SetAttribute(DUI_T("border_size"), DUI_T("1"));
     pLid->SetMouseEnabled(false);
     SetRadius(pLid, std::max(1, lidH / 2), false);
@@ -1100,10 +1139,10 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
     pBody->SetAttribute(DUI_T("halign"), DUI_T("center"));
     pBody->SetAttribute(DUI_T("width"), Num(bodyW));
     pBody->SetAttribute(DUI_T("height"), Num(bodyH));
-    pBody->SetBkColor(DUI_T("#FFF4F4F6"));
-    pBody->SetBkColor2(DUI_T("#FFD6D6DC"));
+    pBody->SetBkColor(canBody);
+    pBody->SetBkColor2(canEdge);
     pBody->SetBkColor2Direction(DUI_T("1"));
-    pBody->SetBorderColor(DUI_T("#FFB4B4BA"));
+    pBody->SetBorderColor(canEdge);
     pBody->SetAttribute(DUI_T("border_size"), DUI_T("1"));
     pBody->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
     pBody->SetMouseEnabled(false);
@@ -1114,7 +1153,7 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
         pRib->SetAttribute(DUI_T("width"), DUI_T("1"));
         pRib->SetAttribute(DUI_T("height"), Num(std::max(4, bodyH - scale(8, 56))));
         pRib->SetAttribute(DUI_T("margin"), MarginH(std::max(1, scale(2, 56))));
-        pRib->SetBkColor(DUI_T("#FFB4B4BA"));
+        pRib->SetBkColor(canEdge);
         pRib->SetMouseEnabled(false);
         pBody->AddItem(pRib);
     }
@@ -1347,10 +1386,24 @@ void PolluxOSForm::UpdateClock()
 
     const char* weekdays[] = { "周日", "周一", "周二", "周三", "周四", "周五", "周六" };
     char menuTimeBuf[80];
-    std::snprintf(menuTimeBuf, sizeof(menuTimeBuf), "%02d月%02d日 %s %02d:%02d",
-                  tm_now.tm_mon + 1, tm_now.tm_mday,
+    std::snprintf(menuTimeBuf, sizeof(menuTimeBuf), "%s %d月%d日 %02d:%02d",
                   weekdays[tm_now.tm_wday],
+                  tm_now.tm_mon + 1, tm_now.tm_mday,
                   tm_now.tm_hour, tm_now.tm_min);
+
+    if (m_pBatteryLabel != nullptr) {
+        // A real reading, refreshed at the same cadence as the clock. Empty
+        // when the machine reports no battery at all.
+        std::string life = pollux::Run("sysctl -n hw.acpi.battery.life 2>/dev/null");
+        while (!life.empty() && (life.back() == '\n' || life.back() == ' ')) {
+            life.pop_back();
+        }
+        const DString text = life.empty() ? DString(DUI_T("--%"))
+                                          : DString(life.c_str()) + DUI_T("%");
+        if (m_pBatteryLabel->GetText() != text) {
+            m_pBatteryLabel->SetText(text);
+        }
+    }
 
     // The menu-bar clock shows minutes: skip SetText when the string did not
     // change, otherwise the timer invalidates the shell every second even

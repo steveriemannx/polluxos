@@ -196,6 +196,7 @@ private:
     bool m_handlersAttached = false;
 
     ui::Label* m_pClockLabel = nullptr;
+    ui::Label* m_pBatteryLabel = nullptr;   // percentage beside the battery glyph
     ui::Label* m_pDesktopClockLabel = nullptr;
     ui::Label* m_pDesktopDateLabel = nullptr;
     size_t     m_clockTimerId = 0;
