@@ -9,7 +9,7 @@
 # not configure that socket, so out of the box nothing but root can change the
 # wireless configuration and the Wi-Fi window would be read-only.
 #
-# This appends two lines to /etc/wpa_supplicant.conf and reloads the daemon.
+# This appends two settings to /etc/wpa_supplicant.conf and reloads the daemon.
 # Run it once, as root:
 #
 #     sudo sh enable-control-interface.sh
@@ -17,6 +17,14 @@
 # Afterwards the socket is group-owned by wheel, so anyone in that group can
 # join a network from the desktop without a password.  Edit the group name
 # below if that is not what you want on a shared machine.
+#
+# update_config=1 is the second setting and a different kind of permission: it
+# is what allows wpa_supplicant to write the file at all.  Without it the
+# daemon answers save_config with FAIL -- "CTRL_IFACE: SAVE_CONFIG - Failed to
+# update configuration" -- so a network joined from the desktop works until the
+# next boot and is then gone, and the window can only report that it could not
+# save.  With it, the network you picked is the network the machine comes back
+# on.
 
 set -e
 
@@ -29,18 +37,43 @@ if [ ! -f "$CONF" ]; then
     exit 1
 fi
 
+# One backup, before the first change, whichever change that turns out to be.
+changed=no
+backup_once() {
+    if [ "$changed" = no ]; then
+        cp "$CONF" "$CONF.bak.$$"
+        echo "backup of the previous file: $CONF.bak.$$"
+        changed=yes
+    fi
+}
+
 if grep -q '^[[:space:]]*ctrl_interface=' "$CONF"; then
     echo "$CONF already sets ctrl_interface"
 else
-    cp "$CONF" "$CONF.bak.$$"
+    backup_once
     cat >> "$CONF" <<EOF
 
 # Added by PolluxOS so the desktop Wi-Fi window can change networks without
-# root.  A backup of the previous file is $CONF.bak.$$
+# root: it asks over this socket, and the group ownership is what makes asking
+# possible for a user who is in that group.
 ctrl_interface=$SOCKET_DIR
 ctrl_interface_group=$GROUP
 EOF
-    echo "added ctrl_interface to $CONF (backup: $CONF.bak.$$)"
+    echo "added ctrl_interface to $CONF"
+fi
+
+if grep -q '^[[:space:]]*update_config=1' "$CONF"; then
+    echo "$CONF already sets update_config=1"
+else
+    backup_once
+    cat >> "$CONF" <<EOF
+
+# Added by PolluxOS: without this, wpa_supplicant refuses to write its own
+# configuration, so a network joined from the desktop is forgotten at the next
+# boot.
+update_config=1
+EOF
+    echo "added update_config=1 to $CONF"
 fi
 
 # A socket, not the pid file that sits in the same directory.
@@ -65,6 +98,7 @@ fi
 if have_socket; then
     echo "control socket is up:"
     ls -l "$SOCKET_DIR" | sed 's/^/    /'
+    echo "the Wi-Fi window can now join networks, and they will be remembered."
     exit 0
 fi
 

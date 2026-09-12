@@ -30,7 +30,10 @@ class WifiForm : public ui::WindowImplBase
 {
     typedef ui::WindowImplBase BaseClass;
 public:
-    WifiForm();
+    /** @p preselectSsid names a network to pick once the first scan lands,
+     *  which is how the menu bar's Wi-Fi popover hands over a network whose
+     *  password still has to be typed here. */
+    explicit WifiForm(const std::string& preselectSsid = std::string());
     virtual ~WifiForm() override;
 
     /** Resource-related interfaces: pure code mode, no layout XML is loaded. */
@@ -72,9 +75,12 @@ private:
     void UpdateConnectBar();
     void DoConnect();
     void DoDisconnect();
+    void DoForget();
     void OnTick();
     void PollSettings();
     void RefreshStatus();
+    /** Paint the status card from m_status without reading anything back. */
+    void ShowStatus();
 
     // ---- helpers ---------------------------------------------------------
     ui::Label* AddLabel(ui::Box* pParent, const DString& text, const DString& font,
@@ -83,6 +89,10 @@ private:
     /** Four bars, the height of the tallest one set by the signal. */
     ui::HBox* MakeSignalBars(ui::Window* pWindow, int dbm, bool active);
     void SetHint(const DString& text, bool bad);
+    /** The one-line fix for whichever way the control interface is missing:
+     *  the setup script when there is no socket, the group that owns it when
+     *  this user simply may not use it. */
+    DString SetupHint() const;
     static DString SignalText(int dbm);
 
     // ---- state -----------------------------------------------------------
@@ -96,6 +106,7 @@ private:
     wifi::Status m_status;
     std::vector<wifi::Network> m_networks;
     std::string m_selectedSsid;
+    std::string m_preselectSsid;   // picked from argv[1], until the first scan
 
     // The scan shells out and takes a second or two, so it runs on its own
     // thread and the result is picked up by the tick: a frozen window while a
@@ -116,6 +127,9 @@ private:
     // still fail on a wrong password.
     std::string m_joiningSsid;
     int m_joinSecondsLeft = 0;
+    // Ticks left of reading the status every second, after something changed;
+    // see kSettleTicks.
+    int m_settleTicks = 0;
     DString m_hint;
     bool m_hintBad = false;
 
@@ -138,6 +152,7 @@ private:
     ui::Label* m_pPasswordLabel = nullptr;
     ui::Button* m_pShowButton = nullptr;      // reveal what was typed
     ui::Button* m_pConnectButton = nullptr;
+    ui::Button* m_pForgetButton = nullptr;   // drop a saved network's entry
     bool m_passwordVisible = false;
     ui::Label* m_pHintLabel = nullptr;
     // The one-time command that enables the control interface, shown only

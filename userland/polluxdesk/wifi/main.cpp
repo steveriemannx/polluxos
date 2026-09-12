@@ -2,16 +2,34 @@
 #include "embedded_resources.inc"  // Build-time embedded resources
 #include "dui/Utils/AppEntry.h"
 
-/** App: FrameworkThread subclass that serves as the DUI_APP_ENTRY target.
- *  Launches the PolluxOS Wi-Fi window (a regular floating app window on the
- *  wlroots compositor; the compositor draws its titlebar and traffic lights).
+/** App: FrameworkThread subclass that serves as the DUI_APP_ENTRY_ARGS
+ *  target.  Launches the PolluxOS Wi-Fi window (a regular floating app window on
+ *  the wlroots compositor; the compositor draws its titlebar and traffic
+ *  lights).
  */
 class App : public ui::FrameworkThread
 {
 public:
     App() : FrameworkThread(DUI_T("App"), ui::kThreadUI) {}
 
-    void Run() { RunMessageLoop(); }
+    /** The entry macro builds the process entry point around one instance. */
+    static App& Instance()
+    {
+        static App instance;
+        return instance;
+    }
+
+    /** argv[1], when present, is a network to preselect.  The menu bar's Wi-Fi
+     *  popover passes one when the network needs a password, which the shell
+     *  cannot type because it never receives the keyboard. */
+    int Run(int argc, char** argv)
+    {
+        if (argc > 1 && argv[1] != nullptr && argv[1][0] != '\0') {
+            m_preselectSsid = DString(argv[1]);
+        }
+        RunMessageLoop();
+        return 0;
+    }
 
 private:
     virtual void OnInit() override
@@ -21,7 +39,7 @@ private:
         ui::GlobalManager::Instance().Startup(
             ui::MemoryResParam(GetEmbeddedResourcesData(), GetEmbeddedResourcesSize()));
 
-        WifiForm* window = new WifiForm();
+        WifiForm* window = new WifiForm(std::string(m_preselectSsid.c_str()));
         window->CreateWnd(nullptr, ui::WindowCreateParam(DUI_T("Wi-Fi"), true));
         // Clicking the compositor's red traffic light sends an xdg close:
         // without this the window is destroyed but the process lingers
@@ -34,6 +52,8 @@ private:
     {
         ui::GlobalManager::Instance().Shutdown();
     }
+
+    DString m_preselectSsid;
 };
 
-DUI_APP_ENTRY(App)
+DUI_APP_ENTRY_ARGS(App)

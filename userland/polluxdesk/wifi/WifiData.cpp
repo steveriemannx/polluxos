@@ -25,10 +25,25 @@ std::string Trim(const std::string& text)
     return text.substr(begin, end - begin + 1);
 }
 
-/** Trim, and drop the "OK" wpa_cli answers down to something comparable. */
-std::string CleanReply(const std::string& raw)
+/** The reply to our command, picked out of everything wpa_cli printed.
+ *
+ *  Interactive wpa_cli introduces itself first -- version, copyright, licence,
+ *  "Interactive mode" -- and echoes every command back after a "> " prompt, so
+ *  its output is <banner> "> <command>" <reply> "> quit" ...  The reply is
+ *  what sits between the first prompt and the next one.
+ *
+ *  It has to be read that way round.  Taking everything but the prompts (which
+ *  is what this did) leaves the banner glued to the front of the answer, so
+ *  "did it say OK?" was never true and every command looked like a failure --
+ *  the window said "无法连接: wpa_cli v2.10", which is the version line being
+ *  reported as the reason.  Reading between the prompts also drops the echoed
+ *  command, which matters for the one command that carries a password.
+ */
+std::string ReplyFrom(const std::string& raw)
 {
     std::string out;
+    bool sawPrompt = false;
+    bool inReply = false;
     size_t start = 0;
     while (start <= raw.size()) {
         size_t end = raw.find('\n', start);
@@ -36,14 +51,33 @@ std::string CleanReply(const std::string& raw)
             end = raw.size();
         }
         const std::string line = Trim(raw.substr(start, end - start));
-        // wpa_cli echoes a "> " prompt per command in interactive mode.
-        if (!line.empty() && line.compare(0, 2, "> ") != 0) {
-            if (!out.empty()) {
-                out += '\n';
-            }
-            out += line;
-        }
         start = end + 1;
+
+        // A prompt is ">" on its own, or "> " with the command echoed after
+        // it.  The trailing prompt ends with carriage returns, hence the trim.
+        const bool prompt = !line.empty() && line[0] == '>' &&
+                            (line.size() == 1 || line[1] == ' ');
+        if (prompt) {
+            if (inReply) {
+                break;      // the reply ended where the next prompt began
+            }
+            inReply = true; // this is the prompt our command was typed at
+            sawPrompt = true;
+            continue;
+        }
+        if (!inReply) {
+            continue;       // still the banner
+        }
+        if (!out.empty()) {
+            out += '\n';
+        }
+        out += line;
+    }
+    if (!sawPrompt) {
+        // No prompts at all, so this is not the interactive wpa_cli the rest
+        // of this assumes: take its output as the reply rather than inventing
+        // a failure out of it.
+        return Trim(raw);
     }
     return out;
 }
@@ -167,18 +201,24 @@ Wifi::Wifi()
     }
 }
 
-bool Wifi::HaveControlInterface() const
+bool Wifi::ControlSocketExists() const
 {
     if (m_interface.empty()) {
         return false;
     }
     const std::string path = "/var/run/wpa_supplicant/" + m_interface;
     struct stat info;
-    if (::stat(path.c_str(), &info) != 0 || !S_ISSOCK(info.st_mode)) {
+    return ::stat(path.c_str(), &info) == 0 && S_ISSOCK(info.st_mode);
+}
+
+bool Wifi::HaveControlInterface() const
+{
+    if (!ControlSocketExists()) {
         return false;
     }
     // The socket exists; whether this user may use it is a permission
     // question, and that is what a failed command reports.
+    const std::string path = "/var/run/wpa_supplicant/" + m_interface;
     return ::access(path.c_str(), R_OK | W_OK) == 0;
 }
 
@@ -235,7 +275,7 @@ bool Wifi::WpaCli(const std::string& command, std::string& response, std::string
     int status = 0;
     ::waitpid(pid, &status, 0);
 
-    response = CleanReply(response);
+    response = ReplyFrom(response);
     if (WIFEXITED(status) && WEXITSTATUS(status) == 127) {
         error = "找不到 wpa_cli";
         return false;
@@ -406,6 +446,7 @@ void Wifi::ReadStatus(Status& out)
 {
     out = Status();
     out.haveControl = HaveControlInterface();
+    out.controlDenied = !out.haveControl && ControlSocketExists();
     if (m_interface.empty()) {
         return;
     }
@@ -501,11 +542,16 @@ bool Wifi::Connect(const std::string& ssid, const std::string& psk, bool secured
         if (!WpaCli("add_network", response, error)) {
             return false;
         }
-        id = std::atoi(response.c_str());
-        if (id < 0) {
+        // The reply is the new block's number and nothing else, so check it
+        // rather than trusting std::atoi: a reply of "FAIL" would come out as
+        // 0, and network 0 is a real network -- one a failure would then
+        // quietly rewrite instead of reporting.
+        if (response.empty() ||
+            response.find_first_not_of("0123456789") != std::string::npos) {
             error = "add_network 没有返回编号：" + response;
             return false;
         }
+        id = std::atoi(response.c_str());
         if (!WpaCli("set_network " + std::to_string(id) + " ssid " +
                         QuoteWpaValue(ssid), response, error)) {
             return false;
@@ -544,7 +590,29 @@ bool Wifi::Connect(const std::string& ssid, const std::string& psk, bool secured
         error = response;
         return false;
     }
-    WpaCli("save_config", response, error);
+    // Deliberately not saved here: select_network says nothing about whether
+    // the handshake will succeed, and a key that has not been through one has
+    // not earned its place in the file.  The caller saves once the connection
+    // is actually up.  (A daemon with update_config=1 writes its configuration
+    // at select time on its own account -- see enable-control-interface.sh --
+    // so this is the window's half of that promise, not the whole of it.)
+    return true;
+}
+
+bool Wifi::SaveConfig(std::string& error)
+{
+    if (!HaveControlInterface()) {
+        error = "wpa_supplicant 控制接口不可用";
+        return false;
+    }
+    std::string response;
+    if (!WpaCli("save_config", response, error)) {
+        return false;
+    }
+    if (response != "OK") {
+        error = response;
+        return false;
+    }
     return true;
 }
 

@@ -3,6 +3,7 @@
 #include "PolluxPaths.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace {
@@ -14,6 +15,9 @@ const int kStatusEveryTicks = 3;
 // How long a join is given before it is called a failure.  A WPA handshake
 // takes a couple of seconds; fifteen is already generous.
 const int kJoinTimeoutSeconds = 15;
+// Ticks to keep reading the status every second after something changed, so
+// what the window shows catches up with what was just done.
+const int kSettleTicks = 4;
 
 DString Num(long long value)
 {
@@ -33,7 +37,10 @@ int SignalLevel(int dbm)
 // ---------------------------------------------------------------------------
 // Window
 // ---------------------------------------------------------------------------
-WifiForm::WifiForm() = default;
+WifiForm::WifiForm(const std::string& preselectSsid)
+    : m_preselectSsid(preselectSsid)
+{
+}
 
 WifiForm::~WifiForm()
 {
@@ -98,7 +105,15 @@ void WifiForm::OnTick()
     CollectScan();
 
     static int tick = 0;
-    if (m_joinSecondsLeft > 0 || ++tick % kStatusEveryTicks == 0) {
+    // Every tick while a join is running or a change is still settling -- that
+    // is when the answer is worth the processes -- and every few ticks the
+    // rest of the time, for a window that mostly sits still.
+    if (m_joinSecondsLeft > 0 || m_settleTicks > 0) {
+        if (m_settleTicks > 0) {
+            --m_settleTicks;
+        }
+        RefreshStatus();
+    } else if (++tick % kStatusEveryTicks == 0) {
         RefreshStatus();
     }
 
@@ -106,21 +121,37 @@ void WifiForm::OnTick()
     // nothing about whether the handshake will work out.
     if (!m_joiningSsid.empty()) {
         if (m_status.connected && m_status.ssid == m_joiningSsid) {
-            SetHint(DString(DUI_T("已连接到 ")) + DString(m_joiningSsid.c_str()), false);
+            DString note = DString(DUI_T("已连接到 ")) + DString(m_joiningSsid.c_str());
+            // Only now is this worth keeping: written any earlier, a mistyped
+            // password would have replaced the saved key of a network that
+            // used to work, and outlived the attempt that mistyped it.
+            std::string saveError;
+            if (!m_wifi.SaveConfig(saveError)) {
+                note += DUI_T("（没能写入配置，重启后需要重连）");
+            }
+            SetHint(note, false);
             m_joiningSsid.clear();
             m_joinSecondsLeft = 0;
-            m_pPassword->SetText(DUI_T(""));
+            // The bar is rebuilt from the status, and a network that is now
+            // connected has no password field -- so this may be a field that
+            // no longer exists.
+            if (m_pPassword != nullptr) {
+                m_pPassword->SetText(DUI_T(""));
+            }
             RebuildNetworkRows();
             UpdateConnectBar();
         } else if (--m_joinSecondsLeft <= 0) {
+            // Only a handshake that was tried and refused says something about
+            // the password.  Everything else -- still scanning, still
+            // associating -- means the attempt has not finished, and calling
+            // that a failure would be a guess, so the state is named instead.
             DString reason = DUI_T("连接超时");
-            if (!m_status.state.empty()) {
-                // 4WAY_HANDSHAKE means the password was refused, which is
-                // worth saying in words rather than in wpa_supplicant's.
-                reason = (m_status.state == "4WAY_HANDSHAKE" ||
-                          m_status.state == "ASSOCIATING")
-                             ? DUI_T("连接失败：密码可能不正确")
-                             : DUI_T("连接失败：") + DString(m_status.state.c_str());
+            if (m_status.state == "4WAY_HANDSHAKE" ||
+                m_status.state == "GROUP_HANDSHAKE") {
+                reason = DUI_T("连接失败：密码可能不正确");
+            } else if (!m_status.state.empty()) {
+                reason = DString(DUI_T("还没连上（")) +
+                         DString(m_status.state.c_str()) + DUI_T("），可以再试一次");
             }
             SetHint(reason, true);
             m_joiningSsid.clear();
@@ -224,6 +255,7 @@ void WifiForm::BuildUi()
     m_pPasswordLabel = nullptr;
     m_pShowButton = nullptr;
     m_pConnectButton = nullptr;
+    m_pForgetButton = nullptr;
     m_pHintLabel = nullptr;
     m_pSetupLabel = nullptr;
 
@@ -381,6 +413,7 @@ void WifiForm::FillConnectBar()
     m_pPasswordLabel = nullptr;
     m_pShowButton = nullptr;
     m_pConnectButton = nullptr;
+    m_pForgetButton = nullptr;
 
     const wifi::Network* network = nullptr;
     for (const wifi::Network& candidate : m_networks) {
@@ -399,7 +432,9 @@ void WifiForm::FillConnectBar()
     m_pConnectBar->AddItem(pRow);
 
     if (!m_status.haveControl) {
-        ui::Label* pHint = AddLabel(pRow, DUI_T("只读模式：控制接口未启用，见下方命令"),
+        ui::Label* pHint = AddLabel(pRow, m_status.controlDenied
+                                              ? DUI_T("只读模式：当前用户无权使用控制接口，见下方命令")
+                                              : DUI_T("只读模式：控制接口未启用，见下方命令"),
                                     DUI_T("system_12"), m_pal.textHint);
         pHint->SetAttribute(DUI_T("width"), DUI_T("stretch"));
         m_connectBarShape = DUI_T("readonly");
@@ -431,7 +466,12 @@ void WifiForm::FillConnectBar()
         m_pPassword->SetBkColor(m_pal.fieldBg);
         m_pPassword->SetBorderColor(m_pal.fieldBorder);
         m_pPassword->SetAttribute(DUI_T("border_size"), DUI_T("1"));
-        m_pPassword->SetTextPadding(ui::UiPadding(10, 0, 10, 0), false);
+        // Text is laid out from the top of this rect, so a 14px font in a 32px
+        // field sat against the upper edge; the top inset is what moves it --
+        // and the caret, which is measured from the same rect -- down to the
+        // middle.  The bottom inset stays 0 so the line still has room to sit
+        // in: a rect shorter than the line is what would clip it.
+        m_pPassword->SetTextPadding(ui::UiPadding(10, 6, 10, 0), false);
         m_pPassword->SetPasswordMode(true);
         m_pPassword->SetLimitText(64);
         SetRadius(m_pPassword, 8, false);
@@ -476,9 +516,34 @@ void WifiForm::FillConnectBar()
         ui::Label* pNote = AddLabel(pRow,
                                     connectedHere
                                         ? DUI_T("这是当前连接的网络")
-                                        : DUI_T("开放网络，无需密码"),
+                                        : (network->saved
+                                               ? DUI_T("已保存的网络")
+                                               : DUI_T("开放网络，无需密码")),
                                     DUI_T("system_12"), m_pal.textHint);
         pNote->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    }
+
+    // A saved network can be dropped without the password being retyped:
+    // wpa_supplicant throws the entry -- key included -- away.
+    if (network->saved) {
+        m_pForgetButton = new ui::Button(this);
+        m_pForgetButton->SetText(DUI_T("忽略此网络"));
+        m_pForgetButton->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        m_pForgetButton->SetAttribute(DUI_T("width"), DUI_T("92"));
+        m_pForgetButton->SetAttribute(DUI_T("height"), DUI_T("32"));
+        m_pForgetButton->SetAttribute(DUI_T("margin"), DUI_T("0,0,10,0"));
+        m_pForgetButton->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
+        m_pForgetButton->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        m_pForgetButton->SetStateColor(ui::kControlStateNormal, m_pal.rowHot);
+        m_pForgetButton->SetStateColor(ui::kControlStateHot, m_pal.danger);
+        m_pForgetButton->SetStateTextColor(ui::kControlStateNormal, m_pal.textBody);
+        m_pForgetButton->SetStateTextColor(ui::kControlStateHot, m_pal.danger);
+        SetRadius(m_pForgetButton, 8, true);
+        m_pForgetButton->AttachClick([this](const ui::EventArgs& /*args*/) {
+            DoForget();
+            return true;
+        });
+        pRow->AddItem(m_pForgetButton);
     }
 
     m_pConnectButton = new ui::Button(this);
@@ -580,6 +645,17 @@ void WifiForm::CollectScan()
             if (network.connected) {
                 m_selectedSsid = network.ssid;
             }
+        }
+        // The menu bar's popover names a network on the command line when it
+        // cannot type the password itself; open with that one picked.
+        if (!m_preselectSsid.empty()) {
+            for (const wifi::Network& network : m_networks) {
+                if (network.ssid == m_preselectSsid) {
+                    SelectNetwork(network.ssid);
+                    break;
+                }
+            }
+            m_preselectSsid.clear();
         }
     } else {
         m_networks.clear();
@@ -805,8 +881,51 @@ void WifiForm::DoDisconnect()
         SetHint(DString((std::string("无法断开：") + error).c_str()), true);
         return;
     }
+    // Take the daemon at its word.  It has accepted the disconnect, so the
+    // link is going down and the address with it -- but reading that back
+    // takes a moment, and until it lands the bar still offers 断开 where the
+    // thing to do next is connect.  Showing the state we asked for keeps the
+    // button honest, and the next poll corrects it if the daemon disagrees.
+    m_status.connected = false;
+    m_status.ssid.clear();
+    m_status.ipAddress.clear();
+    m_status.bssid.clear();
+    m_status.signalDbm = 0;
+    m_status.state = "DISCONNECTED";
+    m_settleTicks = kSettleTicks;
     SetHint(DUI_T("已断开。选一个网络可以重新连接。"), false);
-    RefreshStatus();
+    ShowStatus();
+    UpdateConnectBar();
+}
+
+void WifiForm::DoForget()
+{
+    if (m_selectedSsid.empty()) {
+        return;
+    }
+    std::string error;
+    if (!m_wifi.Forget(m_selectedSsid, error)) {
+        SetHint(DString((std::string("无法忽略：") + error).c_str()), true);
+        return;
+    }
+    // Dropping the entry disconnects the radio too when it was the one in
+    // use, and the row loses its 已保存 mark -- a rescan repaints both.
+    if (m_selectedSsid == m_status.ssid) {
+        // Same reasoning as a disconnect: the daemon has taken the network
+        // away, so the connection it was carrying is going with it.
+        m_status.connected = false;
+        m_status.ssid.clear();
+        m_status.ipAddress.clear();
+        m_status.bssid.clear();
+        m_status.signalDbm = 0;
+        m_status.state = "DISCONNECTED";
+        ShowStatus();
+    }
+    m_settleTicks = kSettleTicks;
+    SetHint(DString((std::string("已忽略 ") + m_selectedSsid).c_str()), false);
+    m_selectedSsid.clear();
+    StartScan();
+    RebuildNetworkRows();
     UpdateConnectBar();
 }
 
@@ -828,6 +947,17 @@ void WifiForm::RefreshStatus()
         }
     }
 
+    ShowStatus();
+}
+
+/** Paint the card from m_status, without reading anything back.  Separated
+ *  from the reading so an action can show its result at once instead of
+ *  waiting up to a full polling interval for the world to agree: a disconnect
+ *  that has been accepted but not yet reflected left the button saying 断开
+ *  for seconds, and the next click on it -- which looked like 连接 -- was a
+ *  second disconnect. */
+void WifiForm::ShowStatus()
+{
     if (m_pStatusHeadline != nullptr) {
         if (m_wifi.Interface().empty()) {
             m_pStatusHeadline->SetText(DUI_T("没有无线网卡"));
@@ -865,15 +995,16 @@ void WifiForm::RefreshStatus()
     if (m_pStatusWarning != nullptr) {
         m_pStatusWarning->SetText(m_status.haveControl
                                       ? DUI_T("")
-                                      : DUI_T("只读：未启用 wpa_supplicant 控制接口"));
+                                      : (m_status.controlDenied
+                                             ? DUI_T("只读：当前用户无权使用 wpa_supplicant 控制接口")
+                                             : DUI_T("只读：未启用 wpa_supplicant 控制接口")));
         // Say exactly what to run, rather than pointing at a document that is
         // not there.  The status is re-read every few seconds, so running the
-        // script makes the window come alive on its own -- no restart, and no
+        // command makes the window come alive on its own -- no restart, and no
         // need to know that it was waiting.
         if (m_pSetupLabel != nullptr) {
-            m_pSetupLabel->SetText(m_status.haveControl
-                                       ? DUI_T("")
-                                       : DUI_T("sudo sh " POLLUX_WIFI_SETUP));
+            m_pSetupLabel->SetText(m_status.haveControl ? DUI_T("")
+                                                         : SetupHint());
         }
     }
 }
@@ -881,6 +1012,18 @@ void WifiForm::RefreshStatus()
 DString WifiForm::SignalText(int dbm)
 {
     return Num(dbm) + DUI_T(" dBm");
+}
+
+DString WifiForm::SetupHint() const
+{
+    if (m_status.controlDenied) {
+        // The socket is owned by a group this user is not in; joining that
+        // group is the whole fix, and wpa_supplicant needs no restart for it.
+        const char* user = ::getenv("USER");
+        return DString(DUI_T("sudo pw groupmod wheel -m ")) +
+               DString(user != nullptr && *user != '\0' ? user : "用户名");
+    }
+    return DString(DUI_T("sudo sh ")) + DString(DUI_T(POLLUX_WIFI_SETUP));
 }
 
 void WifiForm::SetHint(const DString& text, bool bad)

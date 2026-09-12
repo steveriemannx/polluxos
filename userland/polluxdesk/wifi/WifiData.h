@@ -46,6 +46,9 @@ struct Status
 {
     bool connected = false;
     bool haveControl = false;   // the wpa_supplicant control socket is usable
+    bool controlDenied = false; // the socket is there but this user may not use
+                                // it -- a group membership problem, not a
+                                // missing configuration
     std::string ssid;
     std::string ipAddress;
     std::string bssid;
@@ -66,6 +69,13 @@ public:
      *  whether the window can change anything or only report. */
     bool HaveControlInterface() const;
 
+    /** True when the control socket exists at all.  Combined with
+     *  HaveControlInterface() this tells the two read-only cases apart: a
+     *  socket that is missing means wpa_supplicant was never configured for
+     *  one, while a socket that is there but unusable means this user is not
+     *  in the group that owns it -- different problems, different fixes. */
+    bool ControlSocketExists() const;
+
     /** Access points in range, strongest first.  Reading a scan is allowed
      *  without privilege; it takes a moment, so callers run it off the
      *  refresh path that paints the window. */
@@ -81,9 +91,17 @@ public:
      *  again; for a network that is not saved yet, a secured one needs one.
      *  A false return means the request could not be made at all; a true one
      *  means wpa_supplicant accepted it, and the caller has to watch
-     *  Status::state to see whether the handshake then succeeded. */
+     *  Status::state to see whether the handshake then succeeded -- and, once
+     *  it has, call SaveConfig() to keep the result. */
     bool Connect(const std::string& ssid, const std::string& psk, bool secured,
                  std::string& error);
+
+    /** Write the current configuration to wpa_supplicant's config file.
+     *
+     *  Separate from Connect() on purpose: what is worth keeping is the
+     *  network that turned out to work, and a key that has not been through a
+     *  successful handshake has not earned its place in the file yet. */
+    bool SaveConfig(std::string& error);
 
     /** Drop the current connection.  The interface stays up but loses its
      *  address, so on a machine reached over Wi-Fi this is the same as pulling
