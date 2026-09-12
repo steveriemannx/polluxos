@@ -15,8 +15,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <libdrm/drm_fourcc.h>
+#include <libinput.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
+#include <wlr/backend/libinput.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
@@ -1267,10 +1269,46 @@ static void server_new_keyboard(struct polluxdesk_server *server,
 
 static void server_new_pointer(struct polluxdesk_server *server,
 		struct wlr_input_device *device) {
-	/* We don't do anything special with pointers. All of our pointer handling
-	 * is proxied through wlr_cursor. On another compositor, you might take this
-	 * opportunity to do libinput configuration on the device to set
-	 * acceleration, etc. */
+	/* Pointer handling is proxied through wlr_cursor, but the touchpad needs
+	 * one thing configured that nothing else can do for it.
+	 *
+	 * This laptop's clickpad (an ELAN I2C touchpad, reported through hmt and
+	 * evdev) has no separate buttons: the whole pad is the button.  Tapping
+	 * it lightly is a gesture that has to be recognised in software, and
+	 * libinput leaves that recognition off until someone asks for it -- so
+	 * the pad only reacted to a press hard enough to click.  wlroots proxies
+	 * every pointer and configures nothing itself, which is why enabling it
+	 * is the compositor's job.  The tap API lives on libinput's own device
+	 * object, reachable from here through the libinput backend.
+	 *
+	 * A device with no tap support -- a mouse, a trackpoint -- reports zero
+	 * fingers and is left exactly as it was. */
+	struct libinput_device *libinput_device = wlr_libinput_get_device_handle(device);
+	if (libinput_device == NULL) {
+		wlr_cursor_attach_input_device(server->cursor, device);
+		return;
+	}
+
+	const int fingers = libinput_device_config_tap_get_finger_count(libinput_device);
+	if (fingers > 0) {
+		if (libinput_device_config_tap_set_enabled(libinput_device,
+				LIBINPUT_CONFIG_TAP_ENABLED) == LIBINPUT_CONFIG_STATUS_SUCCESS) {
+			/* Tap-and-drag comes with tapping: a tap followed by a finger
+			 * held down drags, which is what everyone expects a tap to do
+			 * once it works at all. */
+			if (libinput_device_config_tap_set_drag_enabled(libinput_device,
+					LIBINPUT_CONFIG_DRAG_ENABLED) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
+				wlr_log(WLR_INFO, "tap and drag not supported on %s", device->name);
+			}
+			wlr_log(WLR_INFO, "tap to click enabled on %s (%d fingers)",
+				device->name, fingers);
+		} else {
+			wlr_log(WLR_ERROR, "could not enable tap to click on %s", device->name);
+		}
+	} else {
+		wlr_log(WLR_INFO, "pointer %s: no tap support", device->name);
+	}
+
 	wlr_cursor_attach_input_device(server->cursor, device);
 }
 

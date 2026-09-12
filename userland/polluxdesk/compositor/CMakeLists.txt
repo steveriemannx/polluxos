@@ -19,6 +19,9 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(WAYLAND_SERVER REQUIRED wayland-server)
 pkg_check_modules(PIXMAN REQUIRED pixman-1)
 pkg_check_modules(XKBCOMMON REQUIRED xkbcommon)
+# Called directly to turn on tap-to-click on the touchpad: wlroots proxies
+# pointers but configures no device, and the tap API is libinput's.
+pkg_check_modules(LIBINPUT REQUIRED libinput)
 
 find_path(WLROOTS_INCLUDE_DIR
     NAMES wlr/backend.h
@@ -41,7 +44,8 @@ target_include_directories(polluxdesk-compositor PRIVATE
     "${WLROOTS_INCLUDE_DIR}"
     ${WAYLAND_SERVER_INCLUDE_DIRS}
     ${PIXMAN_INCLUDE_DIRS}
-    ${XKBCOMMON_INCLUDE_DIRS})
+    ${XKBCOMMON_INCLUDE_DIRS}
+    ${LIBINPUT_INCLUDE_DIRS})
 
 target_link_directories(polluxdesk-compositor PRIVATE /usr/local/lib)
 
@@ -52,7 +56,8 @@ target_link_libraries(polluxdesk-compositor PRIVATE
     wlfixes
     ${WAYLAND_SERVER_LIBRARIES}
     ${PIXMAN_LIBRARIES}
-    ${XKBCOMMON_LIBRARIES})
+    ${XKBCOMMON_LIBRARIES}
+    ${LIBINPUT_LIBRARIES})
 
 # Land next to the other desktop binaries when built from a tree that defines
 # DUI_ROOT (the dui cmake modules); otherwise use this build tree. A bare
