@@ -35,6 +35,7 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_shm.h>
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_decoration_v1.h>
@@ -90,8 +91,10 @@ struct polluxdesk_server {
 
 	struct wlr_seat *seat;
 	struct wlr_virtual_pointer_manager_v1 *virtual_pointer_mgr;
+	struct wlr_virtual_keyboard_manager_v1 *virtual_keyboard_mgr;
 	struct wl_listener new_input;
 	struct wl_listener new_virtual_pointer;
+	struct wl_listener new_virtual_keyboard;
 	struct wl_listener request_cursor;
 	struct wl_listener pointer_focus_change;
 	struct wl_listener request_set_selection;
@@ -1220,6 +1223,16 @@ static void keyboard_handle_key(
 	}
 }
 
+/* The seat's capabilities are what the clients are told about; they have to
+ * be recomputed when a keyboard goes away as well as when one arrives. */
+static void update_seat_capabilities(struct polluxdesk_server *server) {
+	uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
+	if (!wl_list_empty(&server->keyboards)) {
+		caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+	}
+	wlr_seat_set_capabilities(server->seat, caps);
+}
+
 static void keyboard_handle_destroy(struct wl_listener *listener, void *data) {
 	/* This event is raised by the keyboard base wlr_input_device to signal
 	 * the destruction of the wlr_keyboard. It will no longer receive events
@@ -1231,6 +1244,35 @@ static void keyboard_handle_destroy(struct wl_listener *listener, void *data) {
 	wl_list_remove(&keyboard->key.link);
 	wl_list_remove(&keyboard->destroy.link);
 	wl_list_remove(&keyboard->link);
+
+	/* wlroots clears the seat's keyboard when the keyboard it points at is
+	 * destroyed, and nothing here used to put another one back.  That left
+	 * the seat with no keyboard at all -- after which focus_toplevel()
+	 * stopped sending the keyboard-enter, and every window on the desktop
+	 * became unable to receive a single keystroke.  It is reachable by
+	 * unplugging a USB keyboard, and it is exactly what happens when the
+	 * wlrctl test hook's virtual keyboard disconnects.
+	 *
+	 * The focused client has to be told about the replacement: as far as it
+	 * knows its keyboard vanished with the old one. */
+	struct polluxdesk_server *server = keyboard->server;
+	struct wlr_seat *seat = server->seat;
+	struct wlr_surface *focused = seat != NULL
+		? seat->keyboard_state.focused_surface : NULL;
+
+	if (!wl_list_empty(&server->keyboards)) {
+		struct polluxdesk_keyboard *next =
+			wl_container_of(server->keyboards.next, next, link);
+		wlr_seat_set_keyboard(seat, next->wlr_keyboard);
+		if (focused != NULL) {
+			wlr_seat_keyboard_notify_enter(seat, focused,
+				next->wlr_keyboard->keycodes,
+				next->wlr_keyboard->num_keycodes,
+				&next->wlr_keyboard->modifiers);
+		}
+	}
+	update_seat_capabilities(server);
+
 	free(keyboard);
 }
 
@@ -1327,6 +1369,19 @@ static void server_new_virtual_pointer(struct wl_listener *listener,
 		&event->new_pointer->pointer.base);
 }
 
+static void server_new_virtual_keyboard(struct wl_listener *listener,
+		void *data) {
+	/* Test hook companion to POLLUX_VIRTUAL_INPUT.  wlrctl can drive the
+	 * cursor without this, but not the keyboard, and a text field cannot be
+	 * verified by clicking alone.  A virtual keyboard arrives as an input
+	 * device like any other, so it goes through the same setup a real one
+	 * does: xkb keymap, key handling, and a place in the seat. */
+	struct polluxdesk_server *server =
+		wl_container_of(listener, server, new_virtual_keyboard);
+	struct wlr_virtual_keyboard_v1 *virtual_keyboard = data;
+	server_new_keyboard(server, &virtual_keyboard->keyboard.base);
+}
+
 static void server_new_input(struct wl_listener *listener, void *data) {
 	/* This event is raised by the backend when a new input device becomes
 	 * available. */
@@ -1346,11 +1401,7 @@ static void server_new_input(struct wl_listener *listener, void *data) {
 	/* We need to let the wlr_seat know what our capabilities are, which is
 	 * communiciated to the client. In TinyWL we always have a cursor, even if
 	 * there are no pointer devices, so we always include that capability. */
-	uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
-	if (!wl_list_empty(&server->keyboards)) {
-		caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-	}
-	wlr_seat_set_capabilities(server->seat, caps);
+	update_seat_capabilities(server);
 }
 
 static void seat_request_cursor(struct wl_listener *listener, void *data) {
@@ -2531,7 +2582,13 @@ int main(int argc, char *argv[]) {
 		server.new_virtual_pointer.notify = server_new_virtual_pointer;
 		wl_signal_add(&server.virtual_pointer_mgr->events.new_virtual_pointer,
 			&server.new_virtual_pointer);
-		wlr_log(WLR_INFO, "virtual pointer manager enabled (test hook)");
+		server.virtual_keyboard_mgr =
+			wlr_virtual_keyboard_manager_v1_create(server.wl_display);
+		server.new_virtual_keyboard.notify = server_new_virtual_keyboard;
+		wl_signal_add(&server.virtual_keyboard_mgr->events.new_virtual_keyboard,
+			&server.new_virtual_keyboard);
+		wlr_log(WLR_INFO, "virtual pointer and keyboard managers enabled "
+			"(test hook)");
 	}
 	server.request_cursor.notify = seat_request_cursor;
 	wl_signal_add(&server.seat->events.request_set_cursor,
