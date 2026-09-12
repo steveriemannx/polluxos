@@ -8,15 +8,18 @@
 
 /** PolluxOS file manager (pure code mode, no layout XML, Wayland/wlroots).
  *
- *  A Finder-style light-themed file browser window. The wlroots compositor
- *  draws the macOS-style titlebar and traffic lights; this client only paints
- *  the toolbar, the scrollable entry list and the status bar.
+ *  Modelled on the two browsers people actually compare things to: Windows
+ *  Explorer and GNOME Files. That means a places sidebar, a breadcrumb path,
+ *  a sortable column header, a status bar, and a right-click menu on a row --
+ *  the parts that make a file list into a file browser.
  *
  *  Interactions:
- *    - single click on a directory row enters it
- *    - single click on a file opens it (text files in wayst+vim,
- *      executables are run directly)
- *    - toolbar: back / up / home / open terminal here / refresh
+ *    - single click selects a row, double click opens it
+ *    - clicking a column heading sorts by it, and again reverses it
+ *    - right click opens a menu for that row (open / terminal here / move to
+ *      the trash)
+ *    - the toolbar walks the history, goes up, makes a folder and switches
+ *      between the list and the icon grid
  */
 class FilesForm : public ui::WindowImplBase
 {
@@ -44,25 +47,50 @@ private:
     /** One row of the directory listing. */
     struct Entry
     {
-        DString name;    // base name
+        DString name;      // base name
         bool isDir;
-        long long size;  // bytes (0 for directories)
-        DString mtime;   // "yyyy-MM-dd HH:mm"
+        long long size;    // bytes (0 for directories)
+        DString mtime;     // "yyyy-MM-dd HH:mm"; sorts as it reads
     };
 
+    /** A place in the sidebar. */
+    struct Place
+    {
+        const char* label;
+        DString path;
+        DString icon;
+    };
+
+    // ---- construction ----------------------------------------------------
     void BuildUi();
     void BuildToolbar(ui::VBox* pRoot);
-    void BuildFileList(ui::VBox* pRoot);
+    void BuildBody(ui::VBox* pRoot);
+    void BuildSidebar(ui::HBox* pParent);
+    void BuildContent(ui::HBox* pParent);
     void BuildStatusBar(ui::VBox* pRoot);
+    void BuildContextMenu();
 
+    // ---- navigation ------------------------------------------------------
     /** @return false when the directory could not be listed. */
     bool Navigate(const DString& path);
     void NavigateBack();
     void NavigateForward();
+    void NavigateUp();
     void Refresh();
+
+    // ---- content ---------------------------------------------------------
     void ReloadList();
-    void UpdatePathLabel();
+    void UpdateBreadcrumb();
+    void UpdateStatus();
     void OpenEntry(const Entry& entry);
+    void SelectRow(size_t index, unsigned int modifiers);
+    void OpenRow(size_t index);
+    void ShowEntryMenu(size_t index, const ui::UiPoint& pt);
+    void HideContextMenu();
+    void TrashEntry(size_t index);
+    void NewFolder();
+    void SetIconView(bool icons);
+    bool IsSelected(size_t index) const;
 
     /** fork/exec a shell command without waiting for it. */
     void LaunchCommand(const DString& cmdline);
@@ -74,11 +102,41 @@ private:
     std::vector<DString> m_history;   // visited dirs; last = previous dir
     std::vector<DString> m_forward;   // dirs popped by NavigateBack
     DString m_curDir;
-    DString m_startDir;   // requested on the command line; may be empty
+    DString m_startDir;
+
+    // View state.
+    int  m_sortColumn = 0;        // 0 = name, 1 = size, 2 = modified
+    bool m_sortAscending = true;
+    bool m_iconView = false;
+    std::vector<size_t> m_selected;   // indices into m_entries
+    size_t m_anchor = 0;              // for shift-click ranges
 
     ui::VScrollBox* m_pFileList = nullptr;
-    ui::Label* m_pPathLabel = nullptr;
-    ui::Label* m_pStatusLabel = nullptr;
+    ui::HBox*       m_pHeaderRow = nullptr;
+    ui::HBox*       m_pBreadcrumb = nullptr;
+    ui::Label*      m_pStatusLabel = nullptr;
+    ui::Label*      m_pSelectionLabel = nullptr;
+    ui::VBox*       m_pSidebar = nullptr;
+    ui::Button*     m_pBackButton = nullptr;
+    ui::Button*     m_pForwardButton = nullptr;
+    // Kept so the sorted column can carry its arrow.
+    ui::Button*     m_pColumnButtons[3] = { nullptr, nullptr, nullptr };
+
+    // The breadcrumb is a fixed row of slots rather than one button per path
+    // segment. dui lays a control out when the layout pass runs, and adding
+    // children to a live box does not re-run it -- so segments created on the
+    // way into a directory would exist but never get a size. These are built
+    // once at their final width and navigation only changes their text.
+    static const int kCrumbSlots = 4;
+    ui::Button* m_pCrumbButtons[kCrumbSlots] = { nullptr, nullptr, nullptr,
+                                                 nullptr };
+    DString     m_crumbTargets[kCrumbSlots];
+    std::vector<ui::Button*> m_pPlaceButtons;
+
+    // The right-click menu: a floating panel inside the window, the same
+    // technique the desktop shell uses for its dropdowns.
+    ui::VBox* m_pContextMenu = nullptr;
+    size_t    m_contextIndex = 0;
 };
 
 #endif // EXAMPLES_POLLUXDESK_FILES_FILES_FORM_H_
