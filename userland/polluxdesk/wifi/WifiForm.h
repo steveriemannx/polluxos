@@ -58,6 +58,9 @@ private:
     void BuildStatusCard(ui::VBox* pRoot);
     void BuildNetworkList(ui::VBox* pRoot);
     void BuildConnectBar(ui::VBox* pRoot);
+    /** Fill the bar under the list for what is selected: nothing, an open
+     *  network, a secured one that needs a password, or the one we are on. */
+    void FillConnectBar();
     void RebuildUi();
 
     // ---- networking ------------------------------------------------------
@@ -129,6 +132,8 @@ private:
     // Index-aligned with m_networks, so selecting only repaints two rows.
     std::vector<ui::ButtonHBox*> m_rowButtons;
 
+    ui::VBox* m_pConnectBar = nullptr;      // rebuilt on selection change
+    DString   m_connectBarShape;            // what it was last built for
     ui::RichEdit* m_pPassword = nullptr;
     ui::Label* m_pPasswordLabel = nullptr;
     ui::Button* m_pConnectButton = nullptr;

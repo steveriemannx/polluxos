@@ -218,6 +218,8 @@ void WifiForm::BuildUi()
     m_pNetworkList = nullptr;
     m_pNetworkEmpty = nullptr;
     m_rowButtons.clear();
+    m_pConnectBar = nullptr;
+    m_connectBarShape.clear();
     m_pPassword = nullptr;
     m_pPasswordLabel = nullptr;
     m_pConnectButton = nullptr;
@@ -335,54 +337,21 @@ void WifiForm::BuildConnectBar(ui::VBox* pRoot)
     pHairline->SetMouseEnabled(false);
     pRoot->AddItem(pHairline);
 
-    ui::HBox* pBar = new ui::HBox(this);
-    pBar->SetAttribute(DUI_T("height"), DUI_T("56"));
-    pBar->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    pBar->SetAttribute(DUI_T("padding"), DUI_T("16,12,16,12"));
-    pBar->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
-    pRoot->AddItem(pBar);
+    // Fixed height, and its *contents* are what change: dui lays a control out
+    // once, so a bar that grew and shrank would keep the size it was built
+    // with.  Filling it again is safe from a click handler because the rows
+    // that are clicked live in the list above, not in here.
+    m_pConnectBar = new ui::VBox(this);
+    m_pConnectBar->SetAttribute(DUI_T("height"), DUI_T("58"));
+    m_pConnectBar->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    m_pConnectBar->SetAttribute(DUI_T("padding"), DUI_T("16,0,16,0"));
+    m_pConnectBar->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
+    pRoot->AddItem(m_pConnectBar);
 
-    m_pPasswordLabel = AddLabel(pBar, DUI_T("密码"), DUI_T("system_14"),
-                                m_pal.textBody);
-    m_pPasswordLabel->SetAttribute(DUI_T("width"), DUI_T("44"));
-
-    // The password goes into a real text field, which is the whole reason this
-    // window exists: the desktop shell never receives the keyboard.
-    m_pPassword = new ui::RichEdit(this);
-    m_pPassword->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    m_pPassword->SetAttribute(DUI_T("height"), DUI_T("32"));
-    m_pPassword->SetAttribute(DUI_T("margin"), DUI_T("0,0,10,0"));
-    m_pPassword->SetFontId(DUI_T("system_14"));
-    m_pPassword->SetTextColor(m_pal.textStrong);
-    m_pPassword->SetBkColor(m_pal.fieldBg);
-    m_pPassword->SetBorderColor(m_pal.fieldBorder);
-    m_pPassword->SetAttribute(DUI_T("border_size"), DUI_T("1"));
-    m_pPassword->SetTextPadding(ui::UiPadding(10, 0, 10, 0), false);
-    m_pPassword->SetPasswordMode(true);
-    m_pPassword->SetLimitText(64);
-    SetRadius(m_pPassword, 8, false);
-    m_pPassword->AttachReturn([this](const ui::EventArgs& /*args*/) {
-        DoConnect();
-        return true;
-    });
-    pBar->AddItem(m_pPassword);
-
-    m_pConnectButton = new ui::Button(this);
-    m_pConnectButton->SetText(DUI_T("连接"));
-    m_pConnectButton->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-    m_pConnectButton->SetAttribute(DUI_T("width"), DUI_T("88"));
-    m_pConnectButton->SetAttribute(DUI_T("height"), DUI_T("32"));
-    m_pConnectButton->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
-    m_pConnectButton->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-    m_pConnectButton->SetStateColor(ui::kControlStateNormal, m_pal.accent);
-    m_pConnectButton->SetStateColor(ui::kControlStateHot, m_pal.accent);
-    m_pConnectButton->SetStateTextColor(ui::kControlStateNormal, m_pal.textOnAccent);
-    SetRadius(m_pConnectButton, 8, true);
-    m_pConnectButton->AttachClick([this](const ui::EventArgs& /*args*/) {
-        DoConnect();
-        return true;
-    });
-    pBar->AddItem(m_pConnectButton);
+    m_pPassword = nullptr;
+    m_pPasswordLabel = nullptr;
+    m_pConnectButton = nullptr;
+    m_connectBarShape.clear();
 
     // Two lines: what just happened, and -- in read-only mode -- the command
     // that fixes that.  The command is long enough to need a line of its own.
@@ -399,6 +368,114 @@ void WifiForm::BuildConnectBar(ui::VBox* pRoot)
     m_pSetupLabel = AddLabel(pHints, DUI_T(""), DUI_T("system_12"), m_pal.textBody);
     m_pSetupLabel->SetAttribute(DUI_T("height"), DUI_T("20"));
     m_pSetupLabel->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+}
+
+void WifiForm::FillConnectBar()
+{
+    if (m_pConnectBar == nullptr) {
+        return;
+    }
+    m_pConnectBar->RemoveAllItems();
+    m_pPassword = nullptr;
+    m_pPasswordLabel = nullptr;
+    m_pConnectButton = nullptr;
+
+    const wifi::Network* network = nullptr;
+    for (const wifi::Network& candidate : m_networks) {
+        if (candidate.ssid == m_selectedSsid) {
+            network = &candidate;
+            break;
+        }
+    }
+    const bool connectedHere = network != nullptr && !m_status.ssid.empty() &&
+                               network->ssid == m_status.ssid;
+
+    ui::HBox* pRow = new ui::HBox(this);
+    pRow->SetAttribute(DUI_T("height"), DUI_T("34"));
+    pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pRow->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
+    m_pConnectBar->AddItem(pRow);
+
+    if (!m_status.haveControl) {
+        ui::Label* pHint = AddLabel(pRow, DUI_T("只读模式：控制接口未启用，见下方命令"),
+                                    DUI_T("system_12"), m_pal.textHint);
+        pHint->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        m_connectBarShape = DUI_T("readonly");
+        return;
+    }
+    if (network == nullptr) {
+        ui::Label* pHint = AddLabel(pRow, DUI_T("点击上面的网络，输入密码后连接"),
+                                    DUI_T("system_12"), m_pal.textHint);
+        pHint->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        m_connectBarShape = DUI_T("none");
+        return;
+    }
+
+    const bool needPassword = network->secured && !connectedHere;
+
+    if (needPassword) {
+        m_pPasswordLabel = AddLabel(pRow, DUI_T("密码"), DUI_T("system_14"),
+                                    m_pal.textBody);
+        m_pPasswordLabel->SetAttribute(DUI_T("width"), DUI_T("44"));
+
+        // The password goes into a real text field, which is the whole reason
+        // this window exists: the desktop shell never receives the keyboard.
+        m_pPassword = new ui::RichEdit(this);
+        m_pPassword->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        m_pPassword->SetAttribute(DUI_T("height"), DUI_T("32"));
+        m_pPassword->SetAttribute(DUI_T("margin"), DUI_T("0,0,10,0"));
+        m_pPassword->SetFontId(DUI_T("system_14"));
+        m_pPassword->SetTextColor(m_pal.textStrong);
+        m_pPassword->SetBkColor(m_pal.fieldBg);
+        m_pPassword->SetBorderColor(m_pal.fieldBorder);
+        m_pPassword->SetAttribute(DUI_T("border_size"), DUI_T("1"));
+        m_pPassword->SetTextPadding(ui::UiPadding(10, 0, 10, 0), false);
+        m_pPassword->SetPasswordMode(true);
+        m_pPassword->SetLimitText(64);
+        SetRadius(m_pPassword, 8, false);
+        m_pPassword->AttachReturn([this](const ui::EventArgs& /*args*/) {
+            DoConnect();
+            return true;
+        });
+        pRow->AddItem(m_pPassword);
+    } else {
+        ui::Label* pNote = AddLabel(pRow,
+                                    connectedHere
+                                        ? DUI_T("这是当前连接的网络")
+                                        : DUI_T("开放网络，无需密码"),
+                                    DUI_T("system_12"), m_pal.textHint);
+        pNote->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    }
+
+    m_pConnectButton = new ui::Button(this);
+    m_pConnectButton->SetText(connectedHere ? DUI_T("断开") : DUI_T("连接"));
+    m_pConnectButton->SetAttribute(DUI_T("font"), DUI_T("system_14"));
+    m_pConnectButton->SetAttribute(DUI_T("width"), DUI_T("88"));
+    m_pConnectButton->SetAttribute(DUI_T("height"), DUI_T("32"));
+    m_pConnectButton->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
+    m_pConnectButton->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+    m_pConnectButton->SetStateColor(ui::kControlStateNormal,
+                                    connectedHere ? m_pal.danger : m_pal.accent);
+    m_pConnectButton->SetStateColor(ui::kControlStateHot,
+                                    connectedHere ? m_pal.danger : m_pal.accent);
+    m_pConnectButton->SetStateTextColor(ui::kControlStateNormal, m_pal.textOnAccent);
+    m_pConnectButton->SetStateColor(ui::kControlStateDisabled, m_pal.track);
+    m_pConnectButton->SetStateTextColor(ui::kControlStateDisabled, m_pal.textHint);
+    SetRadius(m_pConnectButton, 8, true);
+    m_pConnectButton->AttachClick([this](const ui::EventArgs& /*args*/) {
+        DoConnect();
+        return true;
+    });
+    pRow->AddItem(m_pConnectButton);
+
+    m_connectBarShape = connectedHere ? DUI_T("connected")
+                                      : (needPassword ? DUI_T("secure") : DUI_T("open"));
+
+    // Straight to the field: a network was just picked, and the password is
+    // the only thing left to do.
+    if (m_pPassword != nullptr) {
+        m_pPassword->SetFocus();
+    }
 }
 
 void WifiForm::RebuildUi()
@@ -610,10 +687,6 @@ void WifiForm::UpdateSelection()
 
 void WifiForm::UpdateConnectBar()
 {
-    if (m_pConnectButton == nullptr) {
-        return;
-    }
-    const bool haveControl = m_status.haveControl;
     const wifi::Network* network = nullptr;
     for (const wifi::Network& candidate : m_networks) {
         if (candidate.ssid == m_selectedSsid) {
@@ -621,35 +694,25 @@ void WifiForm::UpdateConnectBar()
             break;
         }
     }
-
     const bool connectedHere = network != nullptr && !m_status.ssid.empty() &&
                                network->ssid == m_status.ssid;
-    const bool needPassword = network != nullptr && network->secured && !network->saved;
 
-    m_pConnectButton->SetText(connectedHere ? DUI_T("断开") : DUI_T("连接"));
-    m_pConnectButton->SetEnabled(haveControl && network != nullptr);
-    // A disabled control falls back to its normal colours unless the disabled
-    // state is given some, which made an unusable button look ready to press.
-    m_pConnectButton->SetStateColor(ui::kControlStateDisabled, m_pal.track);
-    m_pConnectButton->SetStateTextColor(ui::kControlStateDisabled, m_pal.textHint);
-    if (connectedHere) {
-        m_pConnectButton->SetStateColor(ui::kControlStateNormal, m_pal.danger);
-        m_pConnectButton->SetStateColor(ui::kControlStateHot, m_pal.danger);
+    DString shape;
+    if (!m_status.haveControl) {
+        shape = DUI_T("readonly");
+    } else if (network == nullptr) {
+        shape = DUI_T("none");
+    } else if (connectedHere) {
+        shape = DUI_T("connected");
     } else {
-        m_pConnectButton->SetStateColor(ui::kControlStateNormal, m_pal.accent);
-        m_pConnectButton->SetStateColor(ui::kControlStateHot, m_pal.accent);
+        shape = network->secured ? DUI_T("secure") : DUI_T("open");
     }
 
-    if (m_pPassword != nullptr) {
-        const bool usable = network != nullptr && needPassword && haveControl;
-        m_pPassword->SetEnabled(usable);
-        m_pPassword->SetBkColor(usable ? m_pal.fieldBg : m_pal.windowBg);
-        m_pPassword->SetStateColor(ui::kControlStateDisabled, m_pal.windowBg);
-    }
-    if (m_pPasswordLabel != nullptr) {
-        m_pPasswordLabel->SetStateTextColor(
-            ui::kControlStateNormal,
-            (network != nullptr && needPassword) ? m_pal.textBody : m_pal.textHint);
+    // Only when what the bar should contain changes: rebuilding it throws away
+    // whatever was typed into the password field, and a rescan must not do
+    // that while someone is in the middle of typing.
+    if (shape != m_connectBarShape) {
+        FillConnectBar();
     }
 }
 
