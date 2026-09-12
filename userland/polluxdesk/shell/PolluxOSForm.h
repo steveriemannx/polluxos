@@ -62,6 +62,15 @@ private:
      *  deletes the previous tree synchronously, which would be a
      *  use-after-free inside an event handler. */
     void RebuildUi();
+
+    /** Fill the drawing palette from m_settings. Runs before every build, so
+     *  the tree is built with the colours it should be seen in. */
+    void ApplyAppearance();
+
+    /** Watch the settings file and rebuild when it changes. Polled on the
+     *  clock timer like the window state: no signal, no protocol, and editing
+     *  the file by hand works exactly the same way. */
+    void PollSettings();
     void BuildMenuBar(ui::VBox* pRoot);
     void BuildDesktopArea(ui::VBox* pRoot);
     void BuildDock(ui::VBox* pRoot);
@@ -162,6 +171,7 @@ private:
     // that is well below the threshold where a running indicator looks late.
     std::vector<WindowInfo> m_windows;
     unsigned long long m_stateMtime = 0;
+    unsigned long long m_settingsMtime = 0;
     // Indicator dot per dock tile, index-aligned with kDockApps. The controls
     // persist across state changes; only their colour is repainted, so an app
     // starting never rebuilds the dock.
