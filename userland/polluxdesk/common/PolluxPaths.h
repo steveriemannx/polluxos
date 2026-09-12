@@ -10,3 +10,9 @@
 // tree ever moves again: the shell, the launchpad and every menu entry that
 // starts a PolluxOS app all resolve through here.
 #define POLLUX_BIN "$HOME/projects-main/polluxos/build/polluxdesk/bin"
+
+// The one-time, root-run script that lets the Wi-Fi window change networks
+// without a password.  The window prints this path when the control interface
+// is missing, because a hint that says "see the documentation" helps nobody.
+#define POLLUX_WIFI_SETUP \
+    "$HOME/projects-main/polluxos/userland/polluxdesk/wifi/enable-control-interface.sh"

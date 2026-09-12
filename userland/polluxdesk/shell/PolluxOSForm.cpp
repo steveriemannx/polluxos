@@ -1533,10 +1533,31 @@ void PolluxOSForm::ShowWifiPanel(int x, int y)
 
         AddPopoverSection(this, pPanel, DUI_T(""));
         h += 1 + 8 + 4 + 20;
-        AddPopoverText(this, pPanel,
-                       DUI_T("连接网络需要 root 权限，这里只列出扫描结果"),
+        // The keyboard, not privilege, is what this panel lacks: the shell is
+        // the bottom-most surface and the compositor never focuses it, so a
+        // password can only be typed into a window of its own.
+        AddPopoverText(this, pPanel, DUI_T("选择网络并输入密码请在 Wi-Fi 设置里"),
                        g_pal.textHint, DUI_T("system_12"));
         h += kPopoverRowH;
+
+        ui::Button* pOpen = new ui::Button(this);
+        pOpen->SetText(DUI_T("打开 Wi-Fi 设置…"));
+        pOpen->SetAttribute(DUI_T("font"), DUI_T("system_13"));
+        pOpen->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        pOpen->SetAttribute(DUI_T("height"), DUI_T("30"));
+        pOpen->SetAttribute(DUI_T("margin"), DUI_T("0,10,0,0"));
+        pOpen->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pOpen->SetStateColor(ui::kControlStateNormal, g_pal.accent);
+        pOpen->SetStateColor(ui::kControlStateHot, g_pal.accent);
+        pOpen->SetStateTextColor(ui::kControlStateNormal, DUI_T("#FFFFFFFF"));
+        SetRadius(pOpen, 7, true);
+        pOpen->AttachClick([this](const ui::EventArgs&) {
+            HideMenuPanel();
+            LaunchApp("\"" POLLUX_BIN "/polluxdesk_wifi\"");
+            return true;
+        });
+        pPanel->AddItem(pOpen);
+        h += 40;
         return h;
     });
 }

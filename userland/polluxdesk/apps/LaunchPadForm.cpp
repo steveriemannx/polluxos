@@ -340,6 +340,10 @@ void LaunchPadForm::ScanDesktopApps(std::vector<DesktopApp>& apps)
         DString activityExec = DString("\"") + home +
             DUI_T("\"" POLLUX_BIN "/polluxdesk_activity\"");
         apps.push_back({ DUI_T("活动监视器"), activityExec, DUI_T("polluxdesk/icons/activity.svg") });
+
+        DString wifiExec = DString("\"") + home +
+            DUI_T("\"" POLLUX_BIN "/polluxdesk_wifi\"");
+        apps.push_back({ DUI_T("Wi-Fi"), wifiExec, DUI_T("polluxdesk/icons/wifi.svg") });
     }
     std::sort(apps.begin(), apps.end(),
               [](const DesktopApp& a, const DesktopApp& b) {

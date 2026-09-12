@@ -1,7 +1,11 @@
 #include "SettingsForm.h"
 
+#include "PolluxPaths.h"
+#include "PolluxSettings.h"
+
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <sys/stat.h>
 
 namespace {
@@ -262,40 +266,65 @@ void SettingsForm::BuildWifiPanel(ui::VBox* panel)
     title->SetAttribute(DUI_T("height"), DUI_T("34"));
     panel->AddItem(title);
 
+    // The real state of the interface, not a switch that pretends.
+    std::string ssid, address;
+    const std::string interfaces = pollux::Run("ifconfig -l");
+    size_t at = 0;
+    while (at < interfaces.size()) {
+        size_t end = interfaces.find_first_of(" \t\n", at);
+        if (end == std::string::npos) {
+            end = interfaces.size();
+        }
+        const std::string name = interfaces.substr(at, end - at);
+        if (name.compare(0, 4, "wlan") == 0) {
+            const std::string config = pollux::Run(("ifconfig " + name).c_str());
+            const size_t ssidAt = config.find("ssid ");
+            const size_t ssidEnd = config.find(" channel ", ssidAt);
+            if (ssidAt != std::string::npos && ssidEnd != std::string::npos) {
+                ssid = config.substr(ssidAt + 5, ssidEnd - ssidAt - 5);
+            }
+            const size_t inetAt = config.find("inet ");
+            if (inetAt != std::string::npos) {
+                const size_t ipEnd = config.find_first_of(" \t\n", inetAt + 5);
+                address = config.substr(inetAt + 5, ipEnd - inetAt - 5);
+            }
+            break;
+        }
+        at = end + 1;
+    }
+
     ui::Label* status = new ui::Label(this);
-    status->SetText(DUI_T("Wi-Fi  已启用"));
-    status->SetAttribute(DUI_T("font"), DUI_T("system_16"));
+    status->SetText(ssid.empty() ? DUI_T("未连接") : DString(ssid.c_str()));
+    status->SetAttribute(DUI_T("font"), DUI_T("system_bold_16"));
     status->SetAttribute(DUI_T("text_color"), kText);
-    status->SetAttribute(DUI_T("height"), DUI_T("32"));
+    status->SetAttribute(DUI_T("height"), DUI_T("30"));
     panel->AddItem(status);
 
-    ui::Button* toggle = new ui::Button(this);
-    toggle->SetText(DUI_T("关闭 Wi-Fi"));
-    StyleButton(toggle);
-    toggle->AttachClick([this, toggle, status](const ui::EventArgs&) {
-        bool enabled = status->GetText() == DUI_T("Wi-Fi  已启用");
-        status->SetText(enabled ? DUI_T("Wi-Fi  已关闭") : DUI_T("Wi-Fi  已启用"));
-        toggle->SetText(enabled ? DUI_T("启用 Wi-Fi") : DUI_T("关闭 Wi-Fi"));
+    ui::Label* detail = new ui::Label(this);
+    detail->SetText(address.empty() ? DUI_T("没有分配地址") : DString(address.c_str()));
+    detail->SetAttribute(DUI_T("font"), DUI_T("system_14"));
+    detail->SetAttribute(DUI_T("text_color"), kHint);
+    detail->SetAttribute(DUI_T("height"), DUI_T("28"));
+    panel->AddItem(detail);
+
+    ui::Label* note = new ui::Label(this);
+    note->SetText(DUI_T("扫描、选择网络和输入密码在「Wi-Fi」窗口里。"));
+    note->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+    note->SetAttribute(DUI_T("text_color"), kHint);
+    note->SetAttribute(DUI_T("height"), DUI_T("30"));
+    panel->AddItem(note);
+
+    ui::Button* open = new ui::Button(this);
+    open->SetText(DUI_T("打开 Wi-Fi 设置…"));
+    StyleButton(open);
+    open->AttachClick([this](const ui::EventArgs&) {
+        std::system("\"" POLLUX_BIN "/polluxdesk_wifi\" >/dev/null 2>&1 &");
         return true;
     });
-    panel->AddItem(toggle);
-
-    ui::Label* network1 = new ui::Label(this);
-    network1->SetText(DUI_T("PolluxOS-5G"));
-    network1->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-    network1->SetAttribute(DUI_T("text_color"), kText);
-    network1->SetAttribute(DUI_T("height"), DUI_T("30"));
-    panel->AddItem(network1);
-
-    ui::Label* network2 = new ui::Label(this);
-    network2->SetText(DUI_T("TP-LINK_2.4G"));
-    network2->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-    network2->SetAttribute(DUI_T("text_color"), kHint);
-    network2->SetAttribute(DUI_T("height"), DUI_T("30"));
-    panel->AddItem(network2);
+    panel->AddItem(open);
 
     m_pStatus = new ui::Label(this);
-    m_pStatus->SetText(DUI_T("当前为界面演示，未修改真实 Wi-Fi 配置"));
+    m_pStatus->SetText(DUI_T(""));
     m_pStatus->SetAttribute(DUI_T("font"), DUI_T("system_12"));
     m_pStatus->SetAttribute(DUI_T("text_color"), kHint);
     m_pStatus->SetAttribute(DUI_T("height"), DUI_T("30"));
