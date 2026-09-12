@@ -129,6 +129,10 @@ static DString Num(int value)
     return ui::StringUtil::Printf(DUI_T("%d"), value);
 }
 
+const int kPopoverWidth = 300;
+const int kPopoverPad   = 10;
+const int kPopoverRowH  = 26;
+
 // "left,top,right,bottom" with equal horizontal margins.
 static DString MarginH(int px)
 {
@@ -829,19 +833,48 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     // words. dui cannot tint an SVG, so each ships in a light and a dark
     // version and the palette says which to load.
     auto AddStatusGlyph = [this, pTopBar](const char* glyph) {
-        ui::Label* pGlyph = new ui::Label(this);
-        pGlyph->SetAttribute(DUI_T("width"), DUI_T("38"));
-        pGlyph->SetAttribute(DUI_T("height"), DUI_T("24"));
-        pGlyph->SetBkImage(DString(DUI_T("file='polluxdesk/icons/status_")) + glyph +
-                           DUI_T("_") + g_pal.glyphVariant +
-                           DUI_T(".svg' width='30' height='19' halign='center' valign='center'"));
-        pGlyph->SetMouseEnabled(false);
-        pTopBar->AddItem(pGlyph);
+        ui::Button* pButton = new ui::Button(this);
+        pButton->SetAttribute(DUI_T("width"), DUI_T("38"));
+        pButton->SetAttribute(DUI_T("height"), DUI_T("24"));
+        pButton->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pButton->SetBkImage(DString(DUI_T("file='polluxdesk/icons/status_")) + glyph +
+                            DUI_T("_") + g_pal.glyphVariant +
+                            DUI_T(".svg' width='30' height='19' halign='center' valign='center'"));
+        pButton->SetStateColor(ui::kControlStateNormal, g_pal.transparent);
+        pButton->SetStateColor(ui::kControlStateHot, g_pal.barHot);
+        pButton->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
+        pButton->SetStateColorRound(ui::kControlStateHot, ui::UiSize(5, 5), false);
+        pButton->SetAttribute(DUI_T("border_round"), DUI_T("5,5"));
+        pTopBar->AddItem(pButton);
+        return pButton;
     };
 
-    AddStatusGlyph("wifi");
-    AddStatusGlyph("volume");
-    AddStatusGlyph("battery");
+    // The status items are buttons, not decoration: each one opens a panel of
+    // real controls, as on macOS.
+    ui::Button* pWifi = AddStatusGlyph("wifi");
+    ui::Button* pVolume = AddStatusGlyph("volume");
+    ui::Button* pBattery = AddStatusGlyph("battery");
+    // Each handler opens its panel directly rather than through a shared
+    // helper: the click callbacks outlive this function, so anything they
+    // captured by reference would dangle the moment it returned.
+    pWifi->AttachClick([this, pWifi](const ui::EventArgs&) {
+        const ui::UiRect rc = pWifi->GetRect();
+        HideMenuPanel();
+        ShowWifiPanel(rc.right - kPopoverWidth, rc.bottom + 4);
+        return true;
+    });
+    pVolume->AttachClick([this, pVolume](const ui::EventArgs&) {
+        const ui::UiRect rc = pVolume->GetRect();
+        HideMenuPanel();
+        ShowVolumePanel(rc.right - kPopoverWidth, rc.bottom + 4);
+        return true;
+    });
+    pBattery->AttachClick([this, pBattery](const ui::EventArgs&) {
+        const ui::UiRect rc = pBattery->GetRect();
+        HideMenuPanel();
+        ShowBatteryPanel(rc.right - kPopoverWidth, rc.bottom + 4);
+        return true;
+    });
 
     // The reading sits against its own glyph, the way macOS shows it when the
     // percentage is switched on.
@@ -855,7 +888,17 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     m_pBatteryLabel->SetMouseEnabled(false);
     pTopBar->AddItem(m_pBatteryLabel);
 
-    AddStatusGlyph("search");
+    // Not a Spotlight field: the desktop shell never takes keyboard focus --
+    // the compositor skips it deliberately so that clicking the wallpaper
+    // does not steal the keyboard from the window in front -- so there is
+    // nothing here that could receive typing. It opens the app grid instead.
+    ui::Button* pSearch = AddStatusGlyph("search");
+    pSearch->SetToolTipText(DUI_T("打开启动台"));
+    pSearch->AttachClick([this](const ui::EventArgs&) {
+        HideMenuPanel();
+        ShowLaunchPad();
+        return true;
+    });
 
     ui::Button* controlCenter = new ui::Button(this);
     controlCenter->SetAttribute(DUI_T("height"), DUI_T("24"));
@@ -870,9 +913,11 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     controlCenter->SetStateColorRound(ui::kControlStateHot, ui::UiSize(5, 5), false);
     controlCenter->SetAttribute(DUI_T("border_round"), DUI_T("5,5"));
     controlCenter->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-    controlCenter->SetToolTipText(DUI_T("系统设置"));
-    controlCenter->AttachClick([this](const ui::EventArgs&) {
-        LaunchApp("\"" POLLUX_BIN "/polluxdesk_settings\"");
+    controlCenter->SetToolTipText(DUI_T("控制中心"));
+    controlCenter->AttachClick([this, controlCenter](const ui::EventArgs&) {
+        const ui::UiRect rc = controlCenter->GetRect();
+        HideMenuPanel();
+        ShowControlCentre(rc.right - kPopoverWidth, rc.bottom + 4);
         return true;
     });
     pTopBar->AddItem(controlCenter);
@@ -1211,6 +1256,471 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
     pTile->AddItem(pBody);
 
     return pTile;
+}
+
+// ---------------------------------------------------------------------------
+// Status popovers
+//
+// Everything on the right of the menu bar reads real hardware: the same mixer,
+// ifconfig and sysctl the settings app uses. Nothing here is a mock toggle --
+// where a control would need root (bringing a wireless interface up, for
+// instance) it is not offered rather than being faked.
+// ---------------------------------------------------------------------------
+// Left-aligned line of text inside a popover.
+static ui::Label* AddPopoverText(ui::Window* pWindow, ui::VBox* pPanel,
+                                 const DString& text, const DString& colour,
+                                 const DString& font)
+{
+    ui::Label* pLabel = new ui::Label(pWindow);
+    pLabel->SetText(text);
+    pLabel->SetAttribute(DUI_T("font"), font);
+    pLabel->SetStateTextColor(ui::kControlStateNormal, colour);
+    pLabel->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
+    pLabel->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pLabel->SetAttribute(DUI_T("height"), Num(kPopoverRowH));
+    pLabel->SetMouseEnabled(false);
+    pPanel->AddItem(pLabel);
+    return pLabel;
+}
+
+// A section divider with a dim heading, which is how macOS groups a popover.
+static void AddPopoverSection(ui::Window* pWindow, ui::VBox* pPanel,
+                              const DString& text)
+{
+    ui::Control* pLine = new ui::Control(pWindow);
+    pLine->SetAttribute(DUI_T("height"), DUI_T("1"));
+    pLine->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pLine->SetAttribute(DUI_T("margin"), DUI_T("0,8,0,4"));
+    pLine->SetBkColor(g_pal.menuPanelLine);
+    pLine->SetMouseEnabled(false);
+    pPanel->AddItem(pLine);
+
+    ui::Label* pTitle = AddPopoverText(pWindow, pPanel, text, g_pal.textHint,
+                                       DUI_T("system_12"));
+    pTitle->SetAttribute(DUI_T("height"), DUI_T("20"));
+}
+
+// A round-ish chip used for the accent and wallpaper swatches.
+static ui::Button* MakeSwatch(ui::Window* pWindow, const DString& colour,
+                              bool selected)
+{
+    ui::Button* pSwatch = new ui::Button(pWindow);
+    pSwatch->SetAttribute(DUI_T("width"), DUI_T("34"));
+    pSwatch->SetAttribute(DUI_T("height"), DUI_T("24"));
+    pSwatch->SetAttribute(DUI_T("margin"), DUI_T("0,0,8,0"));
+    pSwatch->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+    pSwatch->SetStateColor(ui::kControlStateNormal, colour);
+    pSwatch->SetStateColor(ui::kControlStateHot, colour);
+    pSwatch->SetBorderColor(ui::kControlStateNormal,
+                            selected ? g_pal.accent : g_pal.chipBorder);
+    pSwatch->SetBorderColor(ui::kControlStateHot, g_pal.accent);
+    pSwatch->SetAttribute(DUI_T("border_size"), DUI_T("2"));
+    SetRadius(pSwatch, 6, true);
+    return pSwatch;
+}
+
+// mixer reports vol.volume as "vol.volume=1.00:1.00"; the first number is the
+// level. Returns 0-100, or -1 when the machine has no mixer at all.
+static int ReadVolumePercent()
+{
+    const std::string out = pollux::Run("mixer vol.volume 2>/dev/null");
+    const size_t eq = out.find('=');
+    if (eq == std::string::npos) {
+        return -1;
+    }
+    double value = std::atof(out.c_str() + eq + 1);
+    int percent = static_cast<int>(value * 100.0 + 0.5);
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+    return percent;
+}
+
+static bool ReadVolumeMuted()
+{
+    const std::string out = pollux::Run("mixer vol.mute 2>/dev/null");
+    return out.find("=on") != std::string::npos;
+}
+
+// The SSID the wireless interface is associated with, or empty.
+static std::string CurrentSsid()
+{
+    const std::string out = pollux::Run("ifconfig wlan0 2>/dev/null");
+    const size_t pos = out.find("ssid ");
+    if (pos == std::string::npos) {
+        return std::string();
+    }
+    const size_t start = pos + 5;
+    const size_t end = out.find(' ', start);
+    return out.substr(start, end == std::string::npos ? std::string::npos
+                                                      : end - start);
+}
+
+// Access points the interface can see. `ifconfig wlan0 list scan` needs no
+// root on this system, so the list is real rather than a mock.
+static void ScanWireless(std::vector<std::string>* ssids)
+{
+    const std::string out = pollux::Run("ifconfig wlan0 list scan 2>/dev/null");
+    size_t pos = 0;
+    bool first = true;
+    while (pos < out.size()) {
+        size_t end = out.find('\n', pos);
+        if (end == std::string::npos) {
+            end = out.size();
+        }
+        const std::string line = pollux::Trim(out.substr(pos, end - pos));
+        pos = end + 1;
+        if (first) {
+            first = false;   // the column headings
+            continue;
+        }
+        if (line.empty()) {
+            continue;
+        }
+        const size_t space = line.find(' ');
+        const std::string ssid = space == std::string::npos
+            ? line : line.substr(0, space);
+        bool seen = false;
+        for (const std::string& known : *ssids) {
+            if (known == ssid) {
+                seen = true;
+                break;
+            }
+        }
+        if (!seen) {
+            ssids->push_back(ssid);
+        }
+    }
+}
+
+static bool AcOnline()
+{
+    return pollux::Run("sysctl -n hw.acpi.acline 2>/dev/null").find('1') !=
+        std::string::npos;
+}
+
+void PolluxOSForm::ShowPopover(int x, int y, int width,
+                               const std::function<int(ui::VBox* panel)>& build)
+{
+    if (m_pMenuPanel == nullptr) {
+        return;
+    }
+    m_pMenuPanel->RemoveAllItems();
+    const int height = build(m_pMenuPanel);
+
+    ui::UiRect client;
+    GetClientRect(client);
+    int px = x;
+    int py = y;
+    if (px + width > client.right) {
+        px = client.right - width - 8;
+    }
+    if (py + height > client.bottom) {
+        py = client.bottom - height - 8;
+    }
+    if (px < 4) {
+        px = 4;
+    }
+    if (py < 30) {
+        py = 30;
+    }
+
+    m_pMenuPanel->SetAttribute(DUI_T("width"), Num(width));
+    m_pMenuPanel->SetAttribute(DUI_T("height"), Num(height));
+    m_pMenuPanel->SetPos(ui::UiRect(px, py, px + width, py + height));
+    m_pMenuPanel->SetPaintOrder(100);
+    m_pMenuPanel->SetVisible(true);
+    // Raise the shell above app windows for as long as the panel is open.
+    SetText(DUI_T("PolluxOS Desktop (menu)"));
+    Invalidate(m_pMenuPanel->GetPos());
+}
+
+void PolluxOSForm::ShowVolumePanel(int x, int y)
+{
+    ShowPopover(x, y, kPopoverWidth, [this](ui::VBox* pPanel) -> int {
+        int h = kPopoverPad * 2;
+        AddPopoverText(this, pPanel, DUI_T("声音"), g_pal.textDark, DUI_T("system_15"));
+        h += kPopoverRowH;
+
+        int percent = ReadVolumePercent();
+        if (percent < 0) {
+            AddPopoverText(this, pPanel, DUI_T("这台机器没有可用的混音器"),
+                           g_pal.textHint, DUI_T("system_13"));
+            return h + kPopoverRowH;
+        }
+
+        // A slider and its reading, side by side.
+        ui::HBox* pRow = new ui::HBox(this);
+        pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        pRow->SetAttribute(DUI_T("height"), DUI_T("26"));
+
+        ui::Slider* pSlider = new ui::Slider(this);
+        pSlider->SetClass(DUI_T("slider_horizontal_green"));
+        pSlider->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        pSlider->SetAttribute(DUI_T("height"), DUI_T("26"));
+        pSlider->SetAttribute(DUI_T("thumb_size"), DUI_T("16,16"));
+        pSlider->SetAttribute(DUI_T("progress_color"), g_pal.accent);
+        pSlider->SetMinValue(0);
+        pSlider->SetMaxValue(100);
+        pSlider->SetValue(percent);
+        pSlider->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        ui::Label* pValue = new ui::Label(this);
+        pValue->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        pValue->SetStateTextColor(ui::kControlStateNormal, g_pal.textBody);
+        pValue->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+        pValue->SetAttribute(DUI_T("width"), DUI_T("44"));
+        pValue->SetText(Num(percent) + DUI_T("%"));
+
+        pSlider->AttachValueChanged([this, pValue](const ui::EventArgs& args) {
+            int value = static_cast<int>(args.wParam);
+            if (value < 0) value = 0;
+            if (value > 100) value = 100;
+            pValue->SetText(Num(value) + DUI_T("%"));
+            pollux::Run(("mixer vol=" + std::to_string(value) + "%").c_str());
+            return true;
+        });
+
+        pRow->AddItem(pSlider);
+        pRow->AddItem(pValue);
+        pPanel->AddItem(pRow);
+        h += 26;
+
+        ui::CheckBox* pMute = new ui::CheckBox(this);
+        pMute->SetText(DUI_T("静音"));
+        pMute->SetAttribute(DUI_T("font"), DUI_T("system_13"));
+        pMute->SetStateTextColor(ui::kControlStateNormal, g_pal.textBody);
+        pMute->SetAttribute(DUI_T("height"), Num(kPopoverRowH));
+        pMute->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pMute->Selected(ReadVolumeMuted());
+        pMute->AttachSelect([this](const ui::EventArgs&) {
+            const bool muted = !ReadVolumeMuted();
+            pollux::Run(muted ? "mixer vol.mute=on" : "mixer vol.mute=off");
+            return true;
+        });
+        pPanel->AddItem(pMute);
+        return h + kPopoverRowH;
+    });
+}
+
+void PolluxOSForm::ShowWifiPanel(int x, int y)
+{
+    ShowPopover(x, y, kPopoverWidth, [this](ui::VBox* pPanel) -> int {
+        int h = kPopoverPad * 2;
+        AddPopoverText(this, pPanel, DUI_T("Wi-Fi"), g_pal.textDark, DUI_T("system_15"));
+        h += kPopoverRowH;
+
+        const std::string ssid = CurrentSsid();
+        AddPopoverText(this, pPanel,
+                       ssid.empty() ? DString(DUI_T("未连接")) : DString(ssid.c_str()),
+                       ssid.empty() ? g_pal.textHint : g_pal.textBody,
+                       DUI_T("system_13"));
+        h += kPopoverRowH;
+
+        std::vector<std::string> found;
+        ScanWireless(&found);
+        AddPopoverSection(this, pPanel, DUI_T("扫描到的网络"));
+        h += 1 + 8 + 4 + 20;   // the divider and its margins, then the heading
+
+        if (found.empty()) {
+            AddPopoverText(this, pPanel, DUI_T("没有扫描到网络"), g_pal.textHint,
+                           DUI_T("system_13"));
+            h += kPopoverRowH;
+        }
+        for (size_t i = 0; i < found.size() && i < 8; ++i) {
+            AddPopoverText(this, pPanel, DString(found[i].c_str()), g_pal.textBody,
+                           DUI_T("system_13"));
+            h += kPopoverRowH;
+        }
+
+        AddPopoverSection(this, pPanel, DUI_T(""));
+        h += 1 + 8 + 4 + 20;
+        AddPopoverText(this, pPanel,
+                       DUI_T("连接网络需要 root 权限，这里只列出扫描结果"),
+                       g_pal.textHint, DUI_T("system_12"));
+        h += kPopoverRowH;
+        return h;
+    });
+}
+
+void PolluxOSForm::ShowBatteryPanel(int x, int y)
+{
+    ShowPopover(x, y, kPopoverWidth, [this](ui::VBox* pPanel) -> int {
+        int h = kPopoverPad * 2;
+        AddPopoverText(this, pPanel, DUI_T("电池"), g_pal.textDark, DUI_T("system_15"));
+        h += kPopoverRowH;
+
+        std::string life = pollux::Trim(pollux::Run("sysctl -n hw.acpi.battery.life 2>/dev/null"));
+        std::string time = pollux::Trim(pollux::Run("sysctl -n hw.acpi.battery.time 2>/dev/null"));
+        const bool online = AcOnline();
+
+        if (life.empty()) {
+            AddPopoverText(this, pPanel, DUI_T("这台机器没有电池"), g_pal.textHint,
+                           DUI_T("system_13"));
+            return h + kPopoverRowH;
+        }
+
+        AddPopoverText(this, pPanel, DString(life.c_str()) + DUI_T("%"),
+                       g_pal.textDark, DUI_T("system_20"));
+        h += kPopoverRowH + 6;
+
+        const int minutes = std::atoi(time.c_str());
+        if (minutes > 0) {
+            AddPopoverText(this, pPanel,
+                           online ? DString(DUI_T("充满还需 ")) + Num(minutes) + DUI_T(" 分钟")
+                                  : DString(DUI_T("剩余 ")) + Num(minutes) + DUI_T(" 分钟"),
+                           g_pal.textBody, DUI_T("system_13"));
+            h += kPopoverRowH;
+        }
+        AddPopoverText(this, pPanel,
+                       online ? DUI_T("已接通电源") : DUI_T("使用电池供电"),
+                       g_pal.textHint, DUI_T("system_13"));
+        return h + kPopoverRowH;
+    });
+}
+
+void PolluxOSForm::ShowControlCentre(int x, int y)
+{
+    ShowPopover(x, y, kPopoverWidth, [this](ui::VBox* pPanel) -> int {
+        int h = kPopoverPad * 2;
+        AddPopoverText(this, pPanel, DUI_T("控制中心"), g_pal.textDark, DUI_T("system_15"));
+        h += kPopoverRowH;
+
+        // --- appearance ---------------------------------------------------
+        AddPopoverSection(this, pPanel, DUI_T("外观"));
+        h += 1 + 8 + 4 + 20;
+        {
+            ui::HBox* pRow = new ui::HBox(this);
+            pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+            pRow->SetAttribute(DUI_T("height"), DUI_T("28"));
+            const char* kLabels[] = { "浅色", "深色", "自动" };
+            const char* kValues[] = { "light", "dark", "auto" };
+            for (int i = 0; i < 3; ++i) {
+                ui::Button* pChoice = new ui::Button(this);
+                pChoice->SetText(DString(kLabels[i]));
+                pChoice->SetAttribute(DUI_T("font"), DUI_T("system_13"));
+                pChoice->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+                pChoice->SetAttribute(DUI_T("height"), DUI_T("28"));
+                pChoice->SetAttribute(DUI_T("margin"), DUI_T("0,0,6,0"));
+                pChoice->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+                const bool active = m_settings.appearance == kValues[i];
+                pChoice->SetStateColor(ui::kControlStateNormal,
+                                       active ? g_pal.accent : g_pal.chipBg);
+                pChoice->SetStateColor(ui::kControlStateHot, g_pal.chipHot);
+                pChoice->SetStateTextColor(ui::kControlStateNormal,
+                                           active ? DUI_T("#FFFFFFFF") : g_pal.textBody);
+                SetRadius(pChoice, 6, true);
+                const std::string value = kValues[i];
+                pChoice->AttachClick([this, value](const ui::EventArgs&) {
+                    pollux::SaveKey(pollux::kKeyAppearance, value);
+                    HideMenuPanel();
+                    return true;
+                });
+                pRow->AddItem(pChoice);
+            }
+            pPanel->AddItem(pRow);
+            h += 26;
+        }
+
+        // --- wallpaper ----------------------------------------------------
+        AddPopoverSection(this, pPanel, DUI_T("壁纸"));
+        h += 1 + 8 + 4 + 20;
+        {
+            struct Wallpaper { const char* name; const char* colour; };
+            const Wallpaper kWallpapers[] = {
+                { "blue",   "#44A8F7" }, { "purple", "#7A5AC8" },
+                { "dark",   "#1F2233" }, { "green",  "#35A87A" },
+            };
+            ui::HBox* pRow = new ui::HBox(this);
+            pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+            pRow->SetAttribute(DUI_T("height"), DUI_T("24"));
+            for (const Wallpaper& w : kWallpapers) {
+                ui::Button* pSwatch = MakeSwatch(this, DUI_T(w.colour),
+                                                 m_settings.wallpaper == w.name);
+                const std::string name = w.name;
+                pSwatch->AttachClick([this, name](const ui::EventArgs&) {
+                    pollux::SaveKey(pollux::kKeyWallpaper, name);
+                    // The compositor paints the wallpaper, so it has to be told.
+                    pollux::NotifyCompositor();
+                    HideMenuPanel();
+                    return true;
+                });
+                pRow->AddItem(pSwatch);
+            }
+            pPanel->AddItem(pRow);
+            h += 24;
+        }
+
+        // --- sound --------------------------------------------------------
+        AddPopoverSection(this, pPanel, DUI_T("声音"));
+        h += 1 + 8 + 4 + 20;
+        {
+            int percent = ReadVolumePercent();
+            if (percent < 0) {
+                AddPopoverText(this, pPanel, DUI_T("没有可用的混音器"), g_pal.textHint,
+                               DUI_T("system_13"));
+            } else {
+                ui::Slider* pSlider = new ui::Slider(this);
+                pSlider->SetClass(DUI_T("slider_horizontal_green"));
+                pSlider->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+                pSlider->SetAttribute(DUI_T("height"), DUI_T("26"));
+                pSlider->SetAttribute(DUI_T("thumb_size"), DUI_T("16,16"));
+                pSlider->SetAttribute(DUI_T("progress_color"), g_pal.accent);
+                pSlider->SetMinValue(0);
+                pSlider->SetMaxValue(100);
+                pSlider->SetValue(percent);
+                pSlider->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+                pSlider->AttachValueChanged([](const ui::EventArgs& args) {
+                    int value = static_cast<int>(args.wParam);
+                    if (value < 0) value = 0;
+                    if (value > 100) value = 100;
+                    pollux::Run(("mixer vol=" + std::to_string(value) + "%").c_str());
+                    return true;
+                });
+                pPanel->AddItem(pSlider);
+            }
+            h += 26;
+        }
+
+        // --- status -------------------------------------------------------
+        AddPopoverSection(this, pPanel, DUI_T("状态"));
+        h += 1 + 8 + 4 + 20;
+        {
+            const std::string ssid = CurrentSsid();
+            AddPopoverText(this, pPanel,
+                           DString(DUI_T("Wi-Fi  ")) +
+                               (ssid.empty() ? DString(DUI_T("未连接")) : DString(ssid.c_str())),
+                           g_pal.textBody, DUI_T("system_13"));
+            h += kPopoverRowH;
+
+            const std::string life = pollux::Trim(pollux::Run("sysctl -n hw.acpi.battery.life 2>/dev/null"));
+            AddPopoverText(this, pPanel,
+                           DString(DUI_T("电池  ")) +
+                               (life.empty() ? DString(DUI_T("无")) : DString(life.c_str()) + DUI_T("%")) +
+                               (AcOnline() ? DUI_T("  已接通电源") : DUI_T("  使用电池")),
+                           g_pal.textBody, DUI_T("system_13"));
+            h += kPopoverRowH;
+        }
+
+        // --- footer -------------------------------------------------------
+        ui::Button* pOpen = new ui::Button(this);
+        pOpen->SetText(DUI_T("打开系统设置…"));
+        pOpen->SetAttribute(DUI_T("font"), DUI_T("system_13"));
+        pOpen->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        pOpen->SetAttribute(DUI_T("height"), DUI_T("30"));
+        pOpen->SetAttribute(DUI_T("margin"), DUI_T("0,10,0,0"));
+        pOpen->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pOpen->SetStateColor(ui::kControlStateNormal, g_pal.accent);
+        pOpen->SetStateColor(ui::kControlStateHot, g_pal.accent);
+        pOpen->SetStateTextColor(ui::kControlStateNormal, DUI_T("#FFFFFFFF"));
+        SetRadius(pOpen, 7, true);
+        pOpen->AttachClick([this](const ui::EventArgs&) {
+            HideMenuPanel();
+            LaunchApp("\"" POLLUX_BIN "/polluxdesk_settings\"");
+            return true;
+        });
+        pPanel->AddItem(pOpen);
+        h += 40;
+        return h;
+    });
 }
 
 void PolluxOSForm::BuildDock(ui::VBox* pRoot)

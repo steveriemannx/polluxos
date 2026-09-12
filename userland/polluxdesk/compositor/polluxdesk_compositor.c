@@ -2535,6 +2535,24 @@ int main(int argc, char *argv[]) {
 	wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s",
 			socket);
 
+	/* Publish the pid so clients can signal us without having to match our
+	 * name, which BSD truncates to 19 characters. */
+	{
+		const char *home = getenv("HOME");
+		if (home != NULL) {
+			char dir[1024];
+			char path[1088];
+			snprintf(dir, sizeof(dir), "%s/.config/polluxdesk", home);
+			mkdir(dir, 0755);
+			snprintf(path, sizeof(path), "%s/compositor.pid", dir);
+			FILE *pidFile = fopen(path, "w");
+			if (pidFile != NULL) {
+				fprintf(pidFile, "%ld\n", (long)getpid());
+				fclose(pidFile);
+			}
+		}
+	}
+
 	/* Publish an empty window list before anything can connect. The desktop
 	 * shell trusts the file only while the process named in it is alive, so
 	 * a compositor that starts and finds no windows has to say so -- else a

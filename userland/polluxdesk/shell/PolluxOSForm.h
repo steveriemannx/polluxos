@@ -6,6 +6,7 @@
 
 #include "PolluxSettings.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -116,6 +117,16 @@ private:
     void SetMenuButtonActive(int index, bool active);
     void ShowQuickMenu(int x, int y);
 
+    /** A dropdown that is not a menu. The right-hand end of the menu bar is
+     *  not decoration -- each item opens a panel of real controls, the way it
+     *  does on macOS. `build` fills the panel and returns its height. */
+    void ShowPopover(int x, int y, int width,
+                     const std::function<int(ui::VBox* panel)>& build);
+    void ShowControlCentre(int x, int y);
+    void ShowVolumePanel(int x, int y);
+    void ShowWifiPanel(int x, int y);
+    void ShowBatteryPanel(int x, int y);
+
     // Launchpad: a separate always-on-top overlay window (see LaunchPadForm)
     // so the app grid is never buried under other app windows.
     void ShowLaunchPad();
@@ -208,6 +219,9 @@ private:
 
     ui::Label* m_pClockLabel = nullptr;
     ui::Label* m_pBatteryLabel = nullptr;   // percentage beside the battery glyph
+    ui::Button* m_pVolumeButton = nullptr;      // status items; each opens a panel
+    ui::Button* m_pWifiButton = nullptr;
+    ui::Button* m_pBatteryButton = nullptr;
     ui::Label* m_pDesktopClockLabel = nullptr;
     ui::Label* m_pDesktopDateLabel = nullptr;
     size_t     m_clockTimerId = 0;

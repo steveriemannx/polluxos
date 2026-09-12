@@ -15,6 +15,7 @@
 // (plain C) writes the same format from the other side.
 
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -74,6 +75,22 @@ inline std::string ThumbPath(unsigned long id) {
     return ThumbDir() + "/" + std::to_string(id) + ".png";
 }
 
+// The compositor writes its process id here at startup.
+inline std::string PidPath() { return ConfigDir() + "/compositor.pid"; }
+
+inline std::string ReadFileText(const std::string& path) {
+    std::string out;
+    FILE* file = std::fopen(path.c_str(), "r");
+    if (file == nullptr) return out;
+    char buf[256];
+    size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), file)) > 0) {
+        out.append(buf, n);
+    }
+    std::fclose(file);
+    return out;
+}
+
 inline bool FileExists(const std::string& path) {
     struct stat st;
     return ::stat(path.c_str(), &st) == 0;
@@ -111,6 +128,25 @@ inline unsigned long long MtimeNs(const std::string& path) {
     if (::stat(path.c_str(), &st) != 0) return 0;
     return static_cast<unsigned long long>(st.st_mtim.tv_sec) * 1000000000ULL +
            static_cast<unsigned long long>(st.st_mtim.tv_nsec);
+}
+
+// Ask the compositor to re-read its settings.
+//
+// By pid, never by name: the process is called polluxdesk-compositor, but BSD
+// keeps only the first 19 characters of that in the process table, so
+// `pkill -x polluxdesk-compositor` matches nothing at all. That is what the
+// settings app used to do, which is why its wallpaper and resolution buttons
+// had never once reached the compositor.
+inline bool NotifyCompositor() {
+    const std::string pidText = Trim(ReadFileText(PidPath()));
+    if (pidText.empty()) {
+        return false;
+    }
+    const long pid = std::atol(pidText.c_str());
+    if (pid <= 0) {
+        return false;
+    }
+    return ::kill(static_cast<pid_t>(pid), SIGUSR1) == 0;
 }
 
 // Write a whole file so that a reader either sees the previous contents or the
