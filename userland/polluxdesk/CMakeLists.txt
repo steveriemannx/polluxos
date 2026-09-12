@@ -39,6 +39,6 @@ if(NOT DEFINED EPOLL_SHIM_LIBRARY AND EXISTS "/usr/local/lib/libepoll-shim.so")
     set(EPOLL_SHIM_LIBRARY "/usr/local/lib/libepoll-shim.so")
 endif()
 
-foreach(component shell apps files settings)
+foreach(component shell apps files settings activity)
     add_subdirectory(${component})
 endforeach()

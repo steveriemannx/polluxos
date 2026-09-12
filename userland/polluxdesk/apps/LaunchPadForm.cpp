@@ -330,11 +330,16 @@ void LaunchPadForm::ScanDesktopApps(std::vector<DesktopApp>& apps)
               });
 
     // PolluxOS system tools are not necessarily installed as desktop files.
-    // Keep the native settings application visible in Apps on a fresh system.
+    // Keep the native settings application and the activity monitor visible in
+    // Apps on a fresh system.
     if (home != nullptr) {
         DString settingsExec = DString("\"") + home +
             DUI_T("\"" POLLUX_BIN "/polluxdesk_settings\"");
         apps.push_back({ DUI_T("屏幕与外观"), settingsExec, DUI_T("polluxdesk/icons/settings.svg") });
+
+        DString activityExec = DString("\"") + home +
+            DUI_T("\"" POLLUX_BIN "/polluxdesk_activity\"");
+        apps.push_back({ DUI_T("活动监视器"), activityExec, DUI_T("polluxdesk/icons/activity.svg") });
     }
     std::sort(apps.begin(), apps.end(),
               [](const DesktopApp& a, const DesktopApp& b) {
