@@ -136,7 +136,9 @@ private:
     DString   m_connectBarShape;            // what it was last built for
     ui::RichEdit* m_pPassword = nullptr;
     ui::Label* m_pPasswordLabel = nullptr;
+    ui::Button* m_pShowButton = nullptr;      // reveal what was typed
     ui::Button* m_pConnectButton = nullptr;
+    bool m_passwordVisible = false;
     ui::Label* m_pHintLabel = nullptr;
     // The one-time command that enables the control interface, shown only
     // while it is missing.

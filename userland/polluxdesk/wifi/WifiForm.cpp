@@ -222,6 +222,7 @@ void WifiForm::BuildUi()
     m_connectBarShape.clear();
     m_pPassword = nullptr;
     m_pPasswordLabel = nullptr;
+    m_pShowButton = nullptr;
     m_pConnectButton = nullptr;
     m_pHintLabel = nullptr;
     m_pSetupLabel = nullptr;
@@ -378,6 +379,7 @@ void WifiForm::FillConnectBar()
     m_pConnectBar->RemoveAllItems();
     m_pPassword = nullptr;
     m_pPasswordLabel = nullptr;
+    m_pShowButton = nullptr;
     m_pConnectButton = nullptr;
 
     const wifi::Network* network = nullptr;
@@ -433,11 +435,40 @@ void WifiForm::FillConnectBar()
         m_pPassword->SetPasswordMode(true);
         m_pPassword->SetLimitText(64);
         SetRadius(m_pPassword, 8, false);
+        m_pPassword->SetShowPassword(m_passwordVisible);
         m_pPassword->AttachReturn([this](const ui::EventArgs& /*args*/) {
             DoConnect();
             return true;
         });
         pRow->AddItem(m_pPassword);
+
+        // Reveal what was typed.  A wrong password is impossible to check
+        // behind dots, and there is no physical keyboard shortcut to reach
+        // for here.
+        m_pShowButton = new ui::Button(this);
+        m_pShowButton->SetText(m_passwordVisible ? DUI_T("隐藏") : DUI_T("显示"));
+        m_pShowButton->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        m_pShowButton->SetAttribute(DUI_T("width"), DUI_T("56"));
+        m_pShowButton->SetAttribute(DUI_T("height"), DUI_T("32"));
+        m_pShowButton->SetAttribute(DUI_T("margin"), DUI_T("0,0,10,0"));
+        m_pShowButton->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
+        m_pShowButton->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        m_pShowButton->SetStateColor(ui::kControlStateNormal, m_pal.rowHot);
+        m_pShowButton->SetStateColor(ui::kControlStateHot, m_pal.rowSelected);
+        m_pShowButton->SetStateTextColor(ui::kControlStateNormal, m_pal.textBody);
+        SetRadius(m_pShowButton, 8, true);
+        m_pShowButton->AttachClick([this](const ui::EventArgs& /*args*/) {
+            m_passwordVisible = !m_passwordVisible;
+            if (m_pPassword != nullptr) {
+                m_pPassword->SetShowPassword(m_passwordVisible);
+            }
+            if (m_pShowButton != nullptr) {
+                m_pShowButton->SetText(m_passwordVisible ? DUI_T("隐藏")
+                                                         : DUI_T("显示"));
+            }
+            return true;
+        });
+        pRow->AddItem(m_pShowButton);
     } else {
         ui::Label* pNote = AddLabel(pRow,
                                     connectedHere
