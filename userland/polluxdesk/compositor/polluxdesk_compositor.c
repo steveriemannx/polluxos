@@ -52,7 +52,13 @@
 #define POLLUXDESK_SHADOW_BLUR 32
 #define POLLUXDESK_SHADOW_MAX_ALPHA 96   /* 96/255 at the window edge */
 #define POLLUXDESK_SHADOW_CORNER 14      /* rounded shadow corners */
-#define POLLUXDESK_RESIZE_BORDER 7       /* edge/corner drag hotspot thickness */
+/* Edge/corner drag hotspot, measured either side of the window edge. The
+ * band reaches only a few pixels into the window: whatever a client draws
+ * flush against its own edge -- a scrollbar above all -- lives there, and a
+ * deeper inward band put it under the compositor instead of under the app,
+ * so the pointer showed a resize cursor and the bar could not be clicked. */
+#define POLLUXDESK_RESIZE_BORDER_IN 3    /* how far inside the edge it grabs */
+#define POLLUXDESK_RESIZE_BORDER_OUT 9   /* and how far outside */
 
 enum polluxdesk_cursor_mode {
 	POLLUXDESK_CURSOR_PASSTHROUGH,
@@ -113,6 +119,12 @@ struct polluxdesk_server {
 	 * window list from one left behind by an exited compositor. */
 	unsigned int state_generation;
 	bool cursor_warped;
+	/* True while the pointer is wearing one of the compositor's own resize
+	 * cursors. Moving off a border does not change pointer focus when it stays
+	 * over the same surface, and focus is the only other place the cursor is
+	 * reset -- so without this the resize arrow stayed up across the whole
+	 * window. */
+	bool resize_cursor_shown;
 };
 
 struct polluxdesk_output {
@@ -748,12 +760,13 @@ static uint32_t toplevel_resize_edges_at(struct polluxdesk_toplevel *toplevel,
 	}
 	struct wlr_box box;
 	toplevel_visible_box(toplevel, &box);
-	const int b = POLLUXDESK_RESIZE_BORDER;
+	const int in = POLLUXDESK_RESIZE_BORDER_IN;
+	const int out = POLLUXDESK_RESIZE_BORDER_OUT;
 
-	bool left = lx >= box.x - b && lx < box.x + b;
-	bool right = lx > box.x + box.width - b && lx <= box.x + box.width + b;
-	bool top = ly >= box.y - b && ly < box.y + b;
-	bool bottom = ly > box.y + box.height - b && ly <= box.y + box.height + b;
+	bool left = lx >= box.x - out && lx < box.x + in;
+	bool right = lx > box.x + box.width - in && lx <= box.x + box.width + out;
+	bool top = ly >= box.y - out && ly < box.y + in;
+	bool bottom = ly > box.y + box.height - in && ly <= box.y + box.height + out;
 
 	uint32_t edges = 0;
 	if (left) {
@@ -786,6 +799,7 @@ static void set_resize_cursor(struct polluxdesk_server *server, uint32_t edges) 
 	}
 	if (buffer != NULL) {
 		wlr_cursor_set_buffer(server->cursor, buffer, 14, 14, 1.0f);
+		server->resize_cursor_shown = true;
 	}
 }
 
@@ -1606,6 +1620,15 @@ static void process_cursor_motion(struct polluxdesk_server *server, uint32_t tim
 		 * interactive resize (server_cursor_button owns those presses). */
 		set_resize_cursor(server, edges);
 		return;
+	}
+
+	/* Off the border again: put the arrow back. Staying over the same surface
+	 * means no pointer focus change, so the focus-change listener above never
+	 * fires and the resize cursor would otherwise be left up -- an arrow
+	 * pointing at both window edges with the pointer nowhere near either. */
+	if (server->resize_cursor_shown) {
+		server->resize_cursor_shown = false;
+		wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, "default");
 	}
 
 	if (!toplevel) {
