@@ -100,6 +100,19 @@ private:
     void ApplyRunningIndicators();
     bool IsAppRunning(const char* exeList) const;
 
+    /** True when one of the pinned tiles already stands for this program. */
+    static bool HasPinnedTile(const std::string& exe);
+
+    /** Rebuild the dock's running-application tiles when the set of programs
+     *  without a pinned tile changes. Like the shelf, this defers the rebuild
+     *  to the next timer tick rather than doing it where the change was
+     *  noticed. */
+    void UpdateRunningApps();
+
+    /** A dock tile's right-click menu: the window title, then the two ways to
+     *  end the program -- `pids` is what would go after `kill`. */
+    void ShowDockMenu(const std::string& title, const std::string& pids, int x, int y);
+
     /** Repopulate the shelf of minimized windows in the dock. Chips are
      *  created once with the dock and only shown, hidden and relabelled, so
      *  a window being minimized never rebuilds the shell. */
@@ -199,6 +212,12 @@ private:
     std::vector<ui::Button*>   m_minimizedSlots;
     std::vector<unsigned long> m_minimizedIds;   // window id per slot; 0 = empty
     std::vector<unsigned long> m_shelfIds;       // last applied set
+
+    // Programs running without a launcher of their own, drawn as tiles of
+    // their own in the dock. Built by BuildDock(), so a change to the set
+    // means a rebuild -- hence the last-applied copy, compared against.
+    static const int kRunningTileSlots = 8;
+    std::vector<unsigned long> m_runningIds;
     // The restore request travels as the window title; the marker is cleared
     // on the next timer tick rather than immediately, because two SetText
     // calls in the same handler can coalesce into one commit and the

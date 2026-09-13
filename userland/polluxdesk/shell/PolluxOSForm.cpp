@@ -1,5 +1,6 @@
 #include "PolluxOSForm.h"
 #include "PolluxPaths.h"
+#include "WifiData.h"
 
 #include <algorithm>
 #include <ctime>
@@ -236,6 +237,29 @@ const PolluxOSForm::DockApp PolluxOSForm::kDockApps[] = {
     { "设置",   "*",   "polluxdesk/icons/settings.svg", "#FF9AA4B0", "#FF6B7580", "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_settings\"", "polluxdesk_settings", 1 },
 };
 
+// Icons for programs that are running without a pinned tile -- the Wi-Fi
+// window and Activity among them. Same embedded SVGs the launchpad uses; the
+// fallback is the generic one, so a program nobody thought of still gets a
+// tile rather than a gap in the dock.
+struct RunningIcon
+{
+    const char* exe;
+    const char* icon;
+    const char* color;
+    const char* color2;
+};
+const RunningIcon kRunningIcons[] = {
+    { "polluxdesk_wifi",     "polluxdesk/icons/wifi.svg",     "#FF5AA9E6", "#FF2F6FAB" },
+    { "polluxdesk_activity", "polluxdesk/icons/activity.svg", "#FF8E7CC3", "#FF5F4B8B" },
+    { "polluxdesk_settings", "polluxdesk/icons/settings.svg", "#FF9AA4B0", "#FF6B7580" },
+    { "polluxdesk_files",    "polluxdesk/icons/files.svg",    "#FFF0A35C", "#FFC97A2B" },
+    { "polluxdesk_apps",     "polluxdesk/icons/apps.svg",     "#FF8E7CC3", "#FF5F4B8B" },
+    { "wayst",               "polluxdesk/icons/terminal.svg", "#FF4C9FDB", "#FF2E6FA3" },
+    { "vim",                 "polluxdesk/icons/editor.svg",   "#FF7FB069", "#FF4E7A3F" },
+};
+const int kRunningIconCount =
+    static_cast<int>(sizeof(kRunningIcons) / sizeof(kRunningIcons[0]));
+
 PolluxOSForm::PolluxOSForm()
 {
     // Dock-launched apps are forked and never waited on; ignore SIGCHLD so
@@ -317,7 +341,7 @@ void PolluxOSForm::LaunchApp(const char* cmdline)
     if (std::strcmp(cmdline, "/home/shxu/.local/bin/session-logout") == 0) {
         const char* home = std::getenv("HOME");
         DString launcher = DString(home != nullptr ? home : "/home/shxu") +
-                           DUI_T("/projects-main/polluxos/build/polluxdesk/bin/launcher_code");
+                           DUI_T("/projects-main/polluxos/build/polluxdesk/bin/launcher");
         pid_t pid = fork();
         if (pid < 0) {
             perror("[polluxdesk] logout fork");
@@ -325,8 +349,8 @@ void PolluxOSForm::LaunchApp(const char* cmdline)
         }
         if (pid == 0) {
             setsid();
-            execl(launcher.c_str(), "launcher_code", static_cast<char*>(nullptr));
-            perror("[polluxdesk] logout exec launcher_code");
+            execl(launcher.c_str(), "launcher", static_cast<char*>(nullptr));
+            perror("[polluxdesk] logout exec launcher");
             _exit(127);
         }
         CloseWnd(ui::kWindowCloseNormal);
@@ -1050,6 +1074,7 @@ void PolluxOSForm::PollWindowState()
     }
     ApplyRunningIndicators();
     UpdateMinimizedShelf();
+    UpdateRunningApps();
 }
 
 void PolluxOSForm::UpdateMinimizedShelf()
@@ -1072,6 +1097,54 @@ void PolluxOSForm::UpdateMinimizedShelf()
     // use-after-free (AttachBox deletes the tree synchronously and this runs
     // from a state poll), so it is deferred to the next timer tick.
     m_uiDirty = true;
+}
+
+void PolluxOSForm::UpdateRunningApps()
+{
+    std::vector<unsigned long> ids;
+    for (const WindowInfo& info : m_windows) {
+        if (info.exe.empty() || HasPinnedTile(info.exe)) {
+            continue;   // it already has a tile, and a dot on it
+        }
+        if (ids.size() >= static_cast<size_t>(kRunningTileSlots)) {
+            break;
+        }
+        ids.push_back(info.id);
+    }
+    if (ids == m_runningIds) {
+        return;   // same programs as last time
+    }
+    m_runningIds = ids;
+    m_uiDirty = true;   // BuildDock() is what draws these
+}
+
+// A dock tile's right-click menu.
+//
+// The commands are written into fixed buffers because MenuItem holds a
+// `const char*` and the panel's click handler keeps that pointer: a
+// std::string would move its storage on the next reassignment and leave the
+// handler reading whatever landed in the old one.
+void PolluxOSForm::ShowDockMenu(const std::string& title, const std::string& pids,
+                                int x, int y)
+{
+    if (pids.empty()) {
+        return;
+    }
+    static char s_heading[512];
+    static char s_quitCmd[512];
+    static char s_forceCmd[512];
+    std::snprintf(s_heading, sizeof(s_heading), "%s", title.c_str());
+    std::snprintf(s_quitCmd, sizeof(s_quitCmd), "kill %s", pids.c_str());
+    std::snprintf(s_forceCmd, sizeof(s_forceCmd), "kill -9 %s", pids.c_str());
+
+    static MenuItem items[4];
+    items[0] = { s_heading,  nullptr,    false, false };   // what is being quit
+    items[1] = { "",         nullptr,    true,  false };
+    items[2] = { "退出",      s_quitCmd,  false, true };
+    items[3] = { "强制退出",  s_forceCmd, false, true };
+
+    HideMenuPanel();
+    ShowMenuPanel(items, 4, x, y);
 }
 
 void PolluxOSForm::GrabPendingThumbnail()
@@ -1103,28 +1176,45 @@ void PolluxOSForm::GrabPendingThumbnail()
     m_uiDirty = true;   // the shelf can show the picture on the next build
 }
 
-bool PolluxOSForm::IsAppRunning(const char* exeList) const
+// A tile's `exe` field is a "|"-separated list of program names, so one tile
+// can stand for any of several programs -- the browser tile covers whichever
+// of firefox/chromium got installed.
+static bool ExeListHas(const char* exeList, const std::string& exe)
 {
-    if (exeList == nullptr || exeList[0] == '\0') {
-        return false;   // this tile never shows a dot
+    if (exeList == nullptr || exeList[0] == '\0' || exe.empty()) {
+        return false;
     }
     const std::string list(exeList);
-    for (const WindowInfo& info : m_windows) {
-        if (info.exe.empty()) {
-            continue;
+    size_t start = 0;
+    while (start <= list.size()) {
+        size_t end = list.find('|', start);
+        if (end == std::string::npos) {
+            end = list.size();
         }
-        // "|"-separated so one tile can stand for any of several programs --
-        // the browser tile covers whichever of firefox/chromium got installed.
-        size_t start = 0;
-        while (start <= list.size()) {
-            size_t end = list.find('|', start);
-            if (end == std::string::npos) {
-                end = list.size();
-            }
-            if (list.compare(start, end - start, info.exe) == 0) {
-                return true;
-            }
-            start = end + 1;
+        if (list.compare(start, end - start, exe) == 0) {
+            return true;
+        }
+        start = end + 1;
+    }
+    return false;
+}
+
+bool PolluxOSForm::IsAppRunning(const char* exeList) const
+{
+    for (const WindowInfo& info : m_windows) {
+        if (ExeListHas(exeList, info.exe)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool PolluxOSForm::HasPinnedTile(const std::string& exe)
+{
+    const int count = static_cast<int>(sizeof(kDockApps) / sizeof(kDockApps[0]));
+    for (int i = 0; i < count; ++i) {
+        if (ExeListHas(kDockApps[i].exe, exe)) {
+            return true;
         }
     }
     return false;
@@ -1355,41 +1445,19 @@ static std::string CurrentSsid()
                                                       : end - start);
 }
 
-// Access points the interface can see. `ifconfig wlan0 list scan` needs no
-// root on this system, so the list is real rather than a mock.
-static void ScanWireless(std::vector<std::string>* ssids)
+// Double-quote a word for `sh -c`, so an SSID can be passed to the Wi-Fi
+// window as an argument whatever characters it contains.
+static std::string ShellQuote(const std::string& text)
 {
-    const std::string out = pollux::Run("ifconfig wlan0 list scan 2>/dev/null");
-    size_t pos = 0;
-    bool first = true;
-    while (pos < out.size()) {
-        size_t end = out.find('\n', pos);
-        if (end == std::string::npos) {
-            end = out.size();
+    std::string out = "\"";
+    for (char ch : text) {
+        if (ch == '"' || ch == '\\' || ch == '$' || ch == '`') {
+            out += '\\';
         }
-        const std::string line = pollux::Trim(out.substr(pos, end - pos));
-        pos = end + 1;
-        if (first) {
-            first = false;   // the column headings
-            continue;
-        }
-        if (line.empty()) {
-            continue;
-        }
-        const size_t space = line.find(' ');
-        const std::string ssid = space == std::string::npos
-            ? line : line.substr(0, space);
-        bool seen = false;
-        for (const std::string& known : *ssids) {
-            if (known == ssid) {
-                seen = true;
-                break;
-            }
-        }
-        if (!seen) {
-            ssids->push_back(ssid);
-        }
+        out += ch;
     }
+    out += '"';
+    return out;
 }
 
 static bool AcOnline()
@@ -1508,27 +1576,114 @@ void PolluxOSForm::ShowWifiPanel(int x, int y)
         AddPopoverText(this, pPanel, DUI_T("Wi-Fi"), g_pal.textDark, DUI_T("system_15"));
         h += kPopoverRowH;
 
-        const std::string ssid = CurrentSsid();
+        // The same data layer the Wi-Fi window uses, so the two always agree
+        // on the interface, the networks around it and which of them are
+        // saved.  This is what makes the panel able to switch networks: the
+        // readings and the join go through one implementation.
+        wifi::Wifi wifi;
+        wifi::Status status;
+        wifi.ReadStatus(status);
         AddPopoverText(this, pPanel,
-                       ssid.empty() ? DString(DUI_T("未连接")) : DString(ssid.c_str()),
-                       ssid.empty() ? g_pal.textHint : g_pal.textBody,
+                       status.ssid.empty() ? DString(DUI_T("未连接")) : DString(status.ssid.c_str()),
+                       status.ssid.empty() ? g_pal.textHint : g_pal.textBody,
                        DUI_T("system_13"));
         h += kPopoverRowH;
 
-        std::vector<std::string> found;
-        ScanWireless(&found);
-        AddPopoverSection(this, pPanel, DUI_T("扫描到的网络"));
+        std::vector<wifi::Network> networks;
+        std::string scanError;
+        const bool scanned = wifi.Scan(networks, scanError);
+        AddPopoverSection(this, pPanel, DUI_T("网络"));
         h += 1 + 8 + 4 + 20;   // the divider and its margins, then the heading
 
-        if (found.empty()) {
+        if (!scanned) {
+            AddPopoverText(this, pPanel, DString(scanError.c_str()), g_pal.textHint,
+                           DUI_T("system_13"));
+            h += kPopoverRowH;
+        } else if (networks.empty()) {
             AddPopoverText(this, pPanel, DUI_T("没有扫描到网络"), g_pal.textHint,
                            DUI_T("system_13"));
             h += kPopoverRowH;
         }
-        for (size_t i = 0; i < found.size() && i < 8; ++i) {
-            AddPopoverText(this, pPanel, DString(found[i].c_str()), g_pal.textBody,
-                           DUI_T("system_13"));
-            h += kPopoverRowH;
+
+        const size_t kMaxRows = 8;
+        for (size_t i = 0; i < networks.size() && i < kMaxRows; ++i) {
+            const wifi::Network& network = networks[i];
+            const bool current = !status.ssid.empty() && network.ssid == status.ssid;
+
+            // Without the control socket nothing can be changed from here
+            // either, so the list stays plain text with the reason below.
+            if (!status.haveControl) {
+                AddPopoverText(this, pPanel, DString(network.ssid.c_str()),
+                               current ? g_pal.textBody : g_pal.textHint,
+                               DUI_T("system_13"));
+                h += kPopoverRowH;
+                continue;
+            }
+
+            // A click is all a switch takes for anything that needs no
+            // password: open networks, and saved ones whose key is already
+            // stored.  A new secured network is handed to the Wi-Fi window,
+            // because a password needs the keyboard and this panel is part of
+            // the shell, which the compositor never gives one.
+            ui::ButtonHBox* pRow = new ui::ButtonHBox(this);
+            pRow->SetAttribute(DUI_T("height"), DUI_T("30"));
+            pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+            pRow->SetAttribute(DUI_T("padding"), DUI_T("8,0,8,0"));
+            pRow->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+            pRow->SetStateColor(ui::kControlStateNormal,
+                                current ? g_pal.barHot : g_pal.transparent);
+            pRow->SetStateColor(ui::kControlStateHot, g_pal.menuItemHot);
+            SetRadius(pRow, 7, true);
+            pPanel->AddItem(pRow);
+            h += 30;
+
+            ui::Label* pName = new ui::Label(this);
+            pName->SetText(DString(network.ssid.c_str()));
+            pName->SetAttribute(DUI_T("font"), DUI_T("system_13"));
+            pName->SetStateTextColor(ui::kControlStateNormal, g_pal.textBody);
+            pName->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
+            pName->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+            pName->SetMouseEnabled(false);
+            pRow->AddItem(pName);
+
+            ui::Label* pState = new ui::Label(this);
+            pState->SetText(current ? DUI_T("已连接")
+                                    : (network.saved
+                                           ? DUI_T("已保存")
+                                           : (network.secured ? DUI_T("需密码") : DUI_T(""))));
+            pState->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+            pState->SetStateTextColor(ui::kControlStateNormal,
+                                      current ? g_pal.accent : g_pal.textHint);
+            pState->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+            pState->SetAttribute(DUI_T("width"), DUI_T("60"));
+            pState->SetMouseEnabled(false);
+            pRow->AddItem(pState);
+
+            const std::string ssid = network.ssid;
+            const bool saved = network.saved;
+            const bool secured = network.secured;
+            pRow->AttachClick([this, ssid, saved, secured, current](const ui::EventArgs&) {
+                if (current) {
+                    HideMenuPanel();
+                    return true;
+                }
+                if (saved || !secured) {
+                    // No keyboard needed: the stored key (or none at all)
+                    // joins the network, and the menu bar shows the new one
+                    // on its next status tick.
+                    HideMenuPanel();
+                    wifi::Wifi wifi;
+                    std::string error;
+                    wifi.Connect(ssid, std::string(), secured, error);
+                    return true;
+                }
+                // The password has to be typed where the keyboard goes, and
+                // the window opens with this network already picked.
+                const std::string command = std::string("\"") + POLLUX_BIN +
+                                            "/polluxdesk_wifi\" " + ShellQuote(ssid);
+                LaunchApp(command.c_str());
+                return true;
+            });
         }
 
         AddPopoverSection(this, pPanel, DUI_T(""));
@@ -1536,7 +1691,10 @@ void PolluxOSForm::ShowWifiPanel(int x, int y)
         // The keyboard, not privilege, is what this panel lacks: the shell is
         // the bottom-most surface and the compositor never focuses it, so a
         // password can only be typed into a window of its own.
-        AddPopoverText(this, pPanel, DUI_T("选择网络并输入密码请在 Wi-Fi 设置里"),
+        AddPopoverText(this, pPanel,
+                       status.haveControl
+                           ? DUI_T("需密码的网络会打开 Wi-Fi 窗口输入")
+                           : DUI_T("只读：无法在此更改网络，原因见 Wi-Fi 窗口"),
                        g_pal.textHint, DUI_T("system_12"));
         h += kPopoverRowH;
 
@@ -1761,9 +1919,13 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
     // child_align="hcenter,vcenter": that reliably centers the auto-width
     // frosted bar on the screen.
     ui::HBox* pDockRow = new ui::HBox(this);
-    pDockRow->SetAttribute(DUI_T("height"), DUI_T("92"));
+    // Exactly the bar's height, and the margin is then the whole gap between
+    // the dock and the bottom of the screen: centring the bar in a taller row
+    // left slack above and below it, which is the space the dock was asked to
+    // sit lower into.
+    pDockRow->SetAttribute(DUI_T("height"), Num(barHeight));
     pDockRow->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
-    pDockRow->SetAttribute(DUI_T("margin"), DUI_T("0,0,0,14"));
+    pDockRow->SetAttribute(DUI_T("margin"), DUI_T("0,0,0,10"));
     pRoot->AddItem(pDockRow);
 
     ui::HBox* pDock = new ui::HBox(this);
@@ -1842,6 +2004,28 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
             }
             return true;
         });
+        // Right-click: what is running under this tile, and the way to end it.
+        pIcon->AttachRClick([this, i](const ui::EventArgs& args) {
+            std::string pids;
+            std::string title;
+            for (const WindowInfo& info : m_windows) {
+                if (!ExeListHas(kDockApps[i].exe, info.exe) || info.pid <= 0) {
+                    continue;
+                }
+                if (!pids.empty()) {
+                    pids += ' ';
+                }
+                pids += std::to_string(info.pid);
+                if (title.empty()) {
+                    title = info.title;
+                }
+            }
+            if (title.empty()) {
+                title = kDockApps[i].label;
+            }
+            ShowDockMenu(title, pids, args.ptMouse.x, args.ptMouse.y);
+            return true;
+        });
 
         ui::VBox* pItem = new ui::VBox(this);
         pItem->SetAttribute(DUI_T("width"), Num(iconPx));
@@ -1863,6 +2047,92 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
         m_dockDots.push_back(pDot);
 
         pDock->AddItem(pItem);
+    }
+
+    // Programs running without a launcher of their own -- the Wi-Fi window and
+    // Activity among them -- get a tile each, the way the Dock grows an icon
+    // for an app that is open. A click brings that window forward; a
+    // right-click offers to end it. The set is decided in UpdateRunningApps()
+    // and the dock is rebuilt when it changes, so the tiles can be built here
+    // at their final size like every other control in the bar.
+    {
+        int shown = 0;
+        for (const WindowInfo& info : m_windows) {
+            if (info.exe.empty() || HasPinnedTile(info.exe) ||
+                    shown >= kRunningTileSlots) {
+                continue;
+            }
+            ++shown;
+
+            const RunningIcon* look = nullptr;
+            for (int i = 0; i < kRunningIconCount; ++i) {
+                if (info.exe == kRunningIcons[i].exe) {
+                    look = &kRunningIcons[i];
+                    break;
+                }
+            }
+            const char* iconPath = look != nullptr
+                                       ? look->icon
+                                       : "polluxdesk/icons/app-generic.svg";
+            const DString colour(look != nullptr ? look->color : "#FF8E9AA6");
+            const DString colour2(look != nullptr ? look->color2 : "#FF6B7580");
+
+            ui::Button* pIcon = new ui::Button(this);
+            pIcon->SetBkImage(DString(DUI_T("file='")) + DString(iconPath) +
+                              DUI_T("' width='") + Num(svgSize) + DUI_T("' height='") +
+                              Num(svgSize) + DUI_T("' halign='center' valign='center'"));
+            pIcon->SetAttribute(DUI_T("height"), Num(iconPx));
+            pIcon->SetAttribute(DUI_T("width"), Num(iconPx));
+            pIcon->SetAttribute(DUI_T("halign"), DUI_T("center"));
+            pIcon->SetBkColor(colour);
+            pIcon->SetBkColor2(colour2);
+            pIcon->SetBkColor2Direction(DUI_T("1"));
+            SetRadius(pIcon, iconRadius, true);
+            pIcon->SetBorderColor(ui::kControlStateNormal, colour2);
+            pIcon->SetBorderColor(ui::kControlStateHot, g_pal.accent);
+            pIcon->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+            pIcon->SetToolTipText(DString(info.title.c_str()));
+
+            const unsigned long id = info.id;
+            pIcon->AttachClick([this, id](const ui::EventArgs& /*args*/) {
+                HideMenuPanel();
+                // Same channel the shelf uses to restore a minimized window:
+                // the title is the only thing the compositor listens to, and
+                // its one id-addressed command raises and focuses.
+                SetText(ui::StringUtil::Printf(
+                    DUI_T("PolluxOS Desktop (restore:%lu)"), id));
+                m_titleMarkerPending = true;
+                return true;
+            });
+            const std::string title = info.title.empty() ? info.exe : info.title;
+            const std::string pids = std::to_string(info.pid);
+            pIcon->AttachRClick([this, title, pids](const ui::EventArgs& args) {
+                ShowDockMenu(title, pids, args.ptMouse.x, args.ptMouse.y);
+                return true;
+            });
+
+            // Same wrapper as the pinned tiles, dot lane included, so the two
+            // kinds of tile sit at the same height; the dot is lit, since a
+            // tile that exists at all means the program is running.
+            ui::VBox* pItem = new ui::VBox(this);
+            pItem->SetAttribute(DUI_T("width"), Num(iconPx));
+            pItem->SetAttribute(DUI_T("height"), Num(iconPx + dotLaneH));
+            pItem->SetAttribute(DUI_T("margin"), MarginH(iconGap));
+            pItem->AddItem(pIcon);
+
+            ui::Control* pDot = new ui::Control(this);
+            pDot->SetAttribute(DUI_T("width"), Num(dotSize));
+            pDot->SetAttribute(DUI_T("height"), Num(dotSize));
+            pDot->SetAttribute(DUI_T("halign"), DUI_T("center"));
+            pDot->SetAttribute(DUI_T("margin"),
+                ui::StringUtil::Printf(DUI_T("0,%d,0,0"), std::max(1, dotLaneH - dotSize - 2)));
+            pDot->SetBkColor(g_pal.dockDot);
+            pDot->SetMouseEnabled(false);
+            SetRadius(pDot, dotSize / 2, false);
+            pItem->AddItem(pDot);
+
+            pDock->AddItem(pItem);
+        }
     }
 
     // Right-hand side, inside the bar exactly as macOS has it: a hairline,
