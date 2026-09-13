@@ -1,0 +1,44 @@
+#!/bin/sh
+#
+# PolluxOS Wi-Fi bring-up: make sure a wlan interface exists before netif
+# configures it.
+#
+# The parent device name depends on the driver (iwn0, rtwn0, ath0, ...), so
+# rc.conf cannot name it ahead of time the way `wlans_iwn0="wlan0"` would.
+# `net.wlan.devices` lists whatever wireless parents the kernel found, and the
+# first one gets wlan0.  With `ifconfig_wlan0="WPA SYNCDHCP"` in rc.conf, netif
+# then starts wpa_supplicant -- using /etc/wpa_supplicant.conf, which ships a
+# ctrl_interface, so the desktop's Wi-Fi window can change networks without
+# root from the very first boot.
+
+# PROVIDE: pollux_wifi
+# BEFORE: netif
+
+. /etc/rc.subr
+
+name="pollux_wifi"
+desc="Create a wlan interface for the first wireless device"
+rcvar="pollux_wifi_enable"
+
+start_cmd="${name}_start"
+stop_cmd=":"
+
+pollux_wifi_start()
+{
+	local parents parent
+
+	parents=$(sysctl -n net.wlan.devices 2>/dev/null)
+	[ -n "$parents" ] || return 0
+
+	for parent in $parents; do
+		if ifconfig wlan0 >/dev/null 2>&1; then
+			return 0
+		fi
+		echo "creating wlan0 on ${parent}"
+		ifconfig wlan0 create wlandev "$parent" || return 0
+		return 0
+	done
+}
+
+load_rc_config "$name"
+run_rc_command "$1"
