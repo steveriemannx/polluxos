@@ -58,7 +58,7 @@ private:
     {
         const char* label;
         DString path;
-        DString icon;
+        const char* icon;   // which drawn glyph: folder / house / trash / disk
     };
 
     // ---- construction ----------------------------------------------------
@@ -90,6 +90,8 @@ private:
     void TrashEntry(size_t index);
     void NewFolder();
     void SetIconView(bool icons);
+
+    void ShowProperties(size_t index);
     bool IsSelected(size_t index) const;
 
     /** fork/exec a shell command without waiting for it. */
@@ -108,8 +110,12 @@ private:
     int  m_sortColumn = 0;        // 0 = name, 1 = size, 2 = modified
     bool m_sortAscending = true;
     bool m_iconView = false;
-    std::vector<size_t> m_selected;   // indices into m_entries
-    size_t m_anchor = 0;              // for shift-click ranges
+
+    // What is selected, by name. The listing is sorted on every reload, so a
+    // row index would point at whatever the sort moved into that position --
+    // only the name stays with the file the click landed on.
+    std::vector<DString> m_selected;
+    DString m_anchor;                 // last clicked, for shift-click ranges
 
     ui::VScrollBox* m_pFileList = nullptr;
     ui::HBox*       m_pHeaderRow = nullptr;
@@ -117,6 +123,7 @@ private:
     ui::Label*      m_pStatusLabel = nullptr;
     ui::Label*      m_pSelectionLabel = nullptr;
     ui::VBox*       m_pSidebar = nullptr;
+
     ui::Button*     m_pBackButton = nullptr;
     ui::Button*     m_pForwardButton = nullptr;
     // Kept so the sorted column can carry its arrow.
@@ -131,7 +138,14 @@ private:
     ui::Button* m_pCrumbButtons[kCrumbSlots] = { nullptr, nullptr, nullptr,
                                                  nullptr };
     DString     m_crumbTargets[kCrumbSlots];
-    std::vector<ui::Button*> m_pPlaceButtons;
+    // The "›" in front of each slot but the first, so a path that ends early
+    // can take its separators with it.
+    std::vector<ui::Label*> m_pCrumbSeps;
+    // Control, not Button: the rows are ButtonHBox so they can hold an icon
+    // and a label, and that is a different type. The paths sit alongside
+    // rather than being read back off a tooltip.
+    std::vector<ui::Control*> m_pPlaceButtons;
+    std::vector<DString>     m_placePaths;
 
     // The right-click menu: a floating panel inside the window, the same
     // technique the desktop shell uses for its dropdowns.

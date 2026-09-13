@@ -19,7 +19,6 @@ const DString kBarBorder    = DUI_T("#33000000");
 const DString kTransparent  = DUI_T("#00000000");
 const DString kSidebarBg    = DUI_T("#E8F2F3F7");
 const DString kListBg       = DUI_T("#F9FFFFFF");
-const DString kRowHot       = DUI_T("#220A84FF");
 const DString kRowSelected  = DUI_T("#330A84FF");
 const DString kTextDark     = DUI_T("#FF1D1D1F");
 const DString kTextBody     = DUI_T("#FF3A3A3C");
@@ -29,10 +28,44 @@ const DString kAccent       = DUI_T("#FF0A84FF");
 const DString kHairline     = DUI_T("#22000000");
 const DString kFolderColor   = DUI_T("#FF4C9FDB");
 
+// Hover, deliberately unused.
+//
+// A pointer move marks the control it passed over as hot but repaints nothing,
+// nothing ever clears that mark -- dui's window-level "the pointer left" hides
+// the tooltip and stops there, it does not reset the control -- and so the
+// highlight of everything the pointer has ever crossed appears at the next
+// repaint and then stays.  The result is a trail of blue boxes behind the
+// mouse that no amount of moving away removes.
+//
+// So no control here sets a hot colour: what the pointer does is not shown,
+// and clicks are answered by the pressed state and by the selection, which the
+// app sets itself and can therefore also clear.  Where a control wants a
+// selected look -- the sidebar places, the file rows -- every state is set to
+// that look at once (see SetAllStateColors below), so a control left in any of
+// them still shows what it means and nothing else can repaint it.
+
 const int kRowHeight  = 30;
 const int kCrumbW     = 72;   // one path segment in the breadcrumb
 const int kIconTileW  = 100;
 const int kIconTileH  = 96;
+const int kToolH      = 34;   // toolbar button height
+const int kArrowW     = 46;   // back / forward / up: a wider target than a word
+
+// One colour for every state of a control.
+//
+// Which state a control is left in cannot be relied on here (see the note on
+// hover above), and dui's own fallback chain -- pushed falls back to hot, hot
+// to normal -- means a state that is left set can outlive the reason it was
+// set. Painting all four the same makes the control look the same however it
+// is left: what it should look like is then the app's decision, taken when the
+// selection changes, and nothing else can repaint it a different colour.
+void SetAllStateColors(ui::Control* pControl, const DString& colour)
+{
+    pControl->SetStateColor(ui::kControlStateNormal, colour);
+    pControl->SetStateColor(ui::kControlStateHot, colour);
+    pControl->SetStateColor(ui::kControlStatePushed, colour);
+    pControl->SetStateColor(ui::kControlStateDisabled, colour);
+}
 
 DString FormatSize(long long bytes)
 {
@@ -89,6 +122,33 @@ DString Num(int value)
     return ui::StringUtil::Printf(DUI_T("%d"), value);
 }
 
+// Make a scroll pane re-measure itself after its contents have changed.
+//
+// dui works out a scroll box's range while it arranges the box's children, and
+// adding children does not arrange anything. So a box filled after the window
+// was laid out never learns it holds more than fits: its bar is never given a
+// range, and ScrollBar::SetScrollRange's "range is still zero" branch leaves
+// the bar hidden with an empty rect for good -- a blank strip where the bar
+// should be, that no click can ever reach. Re-setting the box's own rectangle
+// re-runs the arrange, and with it the range.
+void SyncScrollRange(ui::VScrollBox* pBox)
+{
+    if (pBox == nullptr) {
+        return;
+    }
+    pBox->SetPos(pBox->GetPos());
+
+    // And make it opaque. The theme's class carries fade_alpha, whose
+    // animation dui only *plays* when the visibility actually changes -- here
+    // it does not, so the animation is stopped instead and the bar is left at
+    // the alpha its fade would have started from, which is nothing. Visible,
+    // sized, and invisible: that is the blank strip the pane showed.
+    ui::ScrollBar* pBar = pBox->GetVScrollBar();
+    if (pBar != nullptr) {
+        pBar->SetAlpha(255);
+    }
+}
+
 // A hairline used between the panes.
 ui::Control* MakeHairline(ui::Window* pWindow, bool vertical)
 {
@@ -107,6 +167,10 @@ ui::VBox* MakeFolderIcon(ui::Window* pWindow, int size)
     ui::VBox* pIcon = new ui::VBox(pWindow);
     pIcon->SetAttribute(DUI_T("width"), Num(size * 13 / 10));
     pIcon->SetAttribute(DUI_T("height"), Num(size));
+    // An HBox aligns a child vertically by the child's own valign -- the bar's
+    // child_align only reaches the horizontal axis -- so the glyph has to ask
+    // for its own centring, or it rides at the top of the cell.
+    pIcon->SetAttribute(DUI_T("valign"), DUI_T("center"));
     pIcon->SetBkColor(kFolderColor);
     pIcon->SetBkColor2(DUI_T("#FF3E8ECA"));
     pIcon->SetBkColor2Direction(DUI_T("1"));
@@ -129,6 +193,7 @@ ui::VBox* MakeFileIcon(ui::Window* pWindow, int size)
     ui::VBox* pIcon = new ui::VBox(pWindow);
     pIcon->SetAttribute(DUI_T("width"), Num(size * 9 / 10));
     pIcon->SetAttribute(DUI_T("height"), Num(size));
+    pIcon->SetAttribute(DUI_T("valign"), DUI_T("center"));   // see MakeFolderIcon
     pIcon->SetBkColor(DUI_T("#FFFFFFFF"));
     pIcon->SetBorderColor(DUI_T("#FFC9C9CE"));
     pIcon->SetAttribute(DUI_T("border_size"), DUI_T("1"));
@@ -154,20 +219,108 @@ ui::VBox* MakeFileIcon(ui::Window* pWindow, int size)
     return pIcon;
 }
 
+// Sidebar glyphs, drawn from boxes the way the row icons are: the embedded
+// font has no symbol set worth relying on, and a folder, a house, a can and a
+// disk are all recognisable at this size from two or three rectangles.
+ui::VBox* MakePlaceIcon(ui::Window* pWindow, const DString& kind)
+{
+    ui::VBox* pIcon = new ui::VBox(pWindow);
+    pIcon->SetAttribute(DUI_T("width"), DUI_T("18"));
+    pIcon->SetAttribute(DUI_T("height"), DUI_T("16"));
+    pIcon->SetAttribute(DUI_T("valign"), DUI_T("center"));
+    pIcon->SetMouseEnabled(false);
+
+    if (kind == DUI_T("folder")) {
+        pIcon->SetBkColor(kFolderColor);
+        pIcon->SetBkColor2(DUI_T("#FF3E8ECA"));
+        pIcon->SetBkColor2Direction(DUI_T("1"));
+        pIcon->SetAttribute(DUI_T("height"), DUI_T("13"));
+        SetRadius(pIcon, 3, false);
+        ui::Control* pTab = new ui::Control(pWindow);
+        pTab->SetAttribute(DUI_T("width"), DUI_T("8"));
+        pTab->SetAttribute(DUI_T("height"), DUI_T("3"));
+        pTab->SetAttribute(DUI_T("margin"), DUI_T("-1,-2,0,0"));
+        pTab->SetAttribute(DUI_T("halign"), DUI_T("left"));
+        pTab->SetBkColor(DUI_T("#FF2F7AB8"));
+        pTab->SetMouseEnabled(false);
+        pIcon->AddItem(pTab);
+        return pIcon;
+    }
+
+    if (kind == DUI_T("house")) {
+        ui::Control* pRoof = new ui::Control(pWindow);
+        pRoof->SetAttribute(DUI_T("width"), DUI_T("18"));
+        pRoof->SetAttribute(DUI_T("height"), DUI_T("5"));
+        pRoof->SetBkColor(kFolderColor);
+        pRoof->SetMouseEnabled(false);
+        SetRadius(pRoof, 2, false);
+        pIcon->AddItem(pRoof);
+
+        ui::Control* pBody = new ui::Control(pWindow);
+        pBody->SetAttribute(DUI_T("width"), DUI_T("14"));
+        pBody->SetAttribute(DUI_T("height"), DUI_T("9"));
+        pBody->SetAttribute(DUI_T("margin"), DUI_T("0,1,0,0"));
+        pBody->SetAttribute(DUI_T("halign"), DUI_T("center"));
+        pBody->SetBkColor(DUI_T("#FF3E8ECA"));
+        pBody->SetMouseEnabled(false);
+        SetRadius(pBody, 2, false);
+        pIcon->AddItem(pBody);
+        return pIcon;
+    }
+
+    if (kind == DUI_T("trash")) {
+        ui::Control* pLid = new ui::Control(pWindow);
+        pLid->SetAttribute(DUI_T("width"), DUI_T("14"));
+        pLid->SetAttribute(DUI_T("height"), DUI_T("3"));
+        pLid->SetAttribute(DUI_T("halign"), DUI_T("center"));
+        pLid->SetBkColor(kTextHint);
+        pLid->SetMouseEnabled(false);
+        SetRadius(pLid, 1, false);
+        pIcon->AddItem(pLid);
+
+        ui::Control* pBody = new ui::Control(pWindow);
+        pBody->SetAttribute(DUI_T("width"), DUI_T("11"));
+        pBody->SetAttribute(DUI_T("height"), DUI_T("11"));
+        pBody->SetAttribute(DUI_T("margin"), DUI_T("0,1,0,0"));
+        pBody->SetAttribute(DUI_T("halign"), DUI_T("center"));
+        pBody->SetBkColor(kTextHint);
+        pBody->SetMouseEnabled(false);
+        SetRadius(pBody, 2, false);
+        pIcon->AddItem(pBody);
+        return pIcon;
+    }
+
+    // filesystem: a drive
+    pIcon->SetBkColor(kTextHint);
+    pIcon->SetAttribute(DUI_T("height"), DUI_T("12"));
+    SetRadius(pIcon, 2, false);
+    ui::Control* pSlot = new ui::Control(pWindow);
+    pSlot->SetAttribute(DUI_T("width"), DUI_T("14"));
+    pSlot->SetAttribute(DUI_T("height"), DUI_T("3"));
+    pSlot->SetAttribute(DUI_T("margin"), DUI_T("0,2,0,0"));
+    pSlot->SetAttribute(DUI_T("halign"), DUI_T("center"));
+    pSlot->SetBkColor(kListBg);
+    pSlot->SetMouseEnabled(false);
+    pIcon->AddItem(pSlot);
+    return pIcon;
+}
+
 // A flat toolbar button with a glyph, as the browser's own toolbar uses.
 ui::Button* MakeToolButton(ui::Window* pWindow, const DString& glyph,
-                           const DString& tip, int width)
+                           const DString& tip, int width,
+                           const DString& font = DUI_T("system_18"))
 {
     ui::Button* pButton = new ui::Button(pWindow);
     pButton->SetText(glyph);
-    pButton->SetAttribute(DUI_T("font"), DUI_T("system_16"));
+    pButton->SetAttribute(DUI_T("font"), font);
     pButton->SetAttribute(DUI_T("width"), Num(width));
-    pButton->SetAttribute(DUI_T("height"), DUI_T("30"));
+    pButton->SetAttribute(DUI_T("height"), Num(kToolH));
     pButton->SetAttribute(DUI_T("margin"), DUI_T("0,0,4,0"));
     pButton->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
     pButton->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-    pButton->SetStateColor(ui::kControlStateNormal, kTransparent);
-    pButton->SetStateColor(ui::kControlStateHot, kRowHot);
+    // The pressed flash is the only state that shows, which is why it is the
+    // one that keeps a colour.
+    SetAllStateColors(pButton, kTransparent);
     pButton->SetStateColor(ui::kControlStatePushed, kRowSelected);
     pButton->SetStateTextColor(ui::kControlStateNormal, kTextBody);
     pButton->SetStateTextColor(ui::kControlStateDisabled, kTextHint);
@@ -224,6 +377,25 @@ void FilesForm::OnInitWindow()
 
     BaseClass::OnInitWindow();
 
+    // The pane scrolls on the wheel out of the box; the bar is shown outright
+    // rather than left to the theme's fade.
+    //
+    // The theme's vscrollbar class sets fade_alpha and the bar starts
+    // *hidden*: ScrollBar::SetScrollRange hides it while the range is still
+    // zero, which it is at this point because the directory has not been read
+    // yet. Nothing brings it back -- the only re-show in dui is gated on
+    // "not auto-hide" -- and the box goes on reserving its twelve pixels, so
+    // the window shows a blank strip with no bar to grab. Auto-hide off is
+    // what makes that branch reachable, and then SetScrollRange shows it as
+    // soon as the first listing gives it a range.
+    if (m_pFileList != nullptr) {
+        ui::ScrollBar* pBar = m_pFileList->GetVScrollBar();
+        if (pBar != nullptr) {
+            pBar->SetClass(DUI_T("vscrollbar"));
+            pBar->SetAutoHideScroll(false);
+        }
+    }
+
     // Open where we were asked to, falling back rather than leaving the
     // window empty: the dock asks for the trash, which does not exist until
     // something has been thrown away.
@@ -233,6 +405,15 @@ void FilesForm::OnInitWindow()
             Navigate(DUI_T("/"));
         }
     }
+
+    // That listing was built while the window was still unlaid-out: the pane
+    // has no rectangle yet, so syncing its range there does nothing. One
+    // deferred pass, once the layout has given the pane its size, is what
+    // shows the bar for the opening directory. Listings made later are synced
+    // where they are built, in ReloadList.
+    ui::GlobalManager::Instance().Timer().AddTimer(GetWeakFlag(), [this]() {
+        SyncScrollRange(m_pFileList);
+    }, 200, 1);
 }
 
 void FilesForm::BuildUi()
@@ -248,6 +429,7 @@ void FilesForm::BuildUi()
     BuildStatusBar(pRoot);
     BuildContextMenu();
     pRoot->AddItem(m_pContextMenu);
+
 
     AttachBox(pRoot);
 }
@@ -266,23 +448,29 @@ void FilesForm::BuildToolbar(ui::VBox* pRoot)
     // simply not drawn.
     ui::HBox* pRow = new ui::HBox(this);
     pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    pRow->SetAttribute(DUI_T("height"), DUI_T("30"));
+    pRow->SetAttribute(DUI_T("height"), Num(kToolH));
 
-    m_pBackButton = MakeToolButton(this, DUI_T("‹"), DUI_T("后退"), 34);
+    // The three arrows get more room than the word buttons next to them: a
+    // single glyph in a 34px square was a small target for the two controls
+    // used most.
+    m_pBackButton = MakeToolButton(this, DUI_T("←"), DUI_T("后退"), kArrowW,
+                                  DUI_T("system_24"));
     m_pBackButton->AttachClick([this](const ui::EventArgs&) {
         NavigateBack();
         return true;
     });
     pRow->AddItem(m_pBackButton);
 
-    m_pForwardButton = MakeToolButton(this, DUI_T("›"), DUI_T("前进"), 34);
+    m_pForwardButton = MakeToolButton(this, DUI_T("→"), DUI_T("前进"), kArrowW,
+                                     DUI_T("system_24"));
     m_pForwardButton->AttachClick([this](const ui::EventArgs&) {
         NavigateForward();
         return true;
     });
     pRow->AddItem(m_pForwardButton);
 
-    ui::Button* pUp = MakeToolButton(this, DUI_T("↑"), DUI_T("上一级"), 34);
+    ui::Button* pUp = MakeToolButton(this, DUI_T("↑"), DUI_T("上一级"), kArrowW,
+                                      DUI_T("system_24"));
     pUp->AttachClick([this](const ui::EventArgs&) {
         NavigateUp();
         return true;
@@ -338,6 +526,10 @@ void FilesForm::BuildToolbar(ui::VBox* pRoot)
             pSep->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
             pSep->SetMouseEnabled(false);
             m_pBreadcrumb->AddItem(pSep);
+            // Kept so a shorter path can take the separator with it; a trail
+            // of "›" pointing at nothing is what a path that ends early looks
+            // like otherwise.
+            m_pCrumbSeps.push_back(pSep);
         }
         ui::Button* pCrumb = new ui::Button(this);
         pCrumb->SetAttribute(DUI_T("font"), DUI_T("system_13"));
@@ -346,8 +538,9 @@ void FilesForm::BuildToolbar(ui::VBox* pRoot)
         pCrumb->SetAttribute(DUI_T("height"), DUI_T("stretch"));
         pCrumb->SetAttribute(DUI_T("width"), Num(kCrumbW));
         pCrumb->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-        pCrumb->SetStateColor(ui::kControlStateNormal, kTransparent);
-        pCrumb->SetStateColor(ui::kControlStateHot, kRowHot);
+        // The crumb is a word in a path, not a button: no hover box, and
+        // nothing left behind by a click either.
+        SetAllStateColors(pCrumb, kTransparent);
         SetRadius(pCrumb, 5, true);
         const int slot = i;
         pCrumb->AttachClick([this, slot](const ui::EventArgs&) {
@@ -397,7 +590,7 @@ void FilesForm::BuildSidebar(ui::HBox* pParent)
     const DString homeDir(home != nullptr ? home : "/");
 
     std::vector<Place> places;
-    places.push_back({ "主目录", homeDir, DUI_T("🏠") });
+    places.push_back({ "主目录", homeDir, "house" });
     struct Shortcut { const char* label; const char* sub; };
     const Shortcut shortcuts[] = {
         { "桌面", "Desktop" }, { "文档", "Documents" }, { "下载", "Downloads" },
@@ -407,26 +600,42 @@ void FilesForm::BuildSidebar(ui::HBox* pParent)
         const DString path = homeDir + DUI_T("/") + DString(shortcut.sub);
         struct stat st;
         if (stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
-            places.push_back({ shortcut.label, path, DUI_T("") });
+            places.push_back({ shortcut.label, path, "folder" });
         }
     }
-    places.push_back({ "废纸篓", homeDir + DUI_T("/.Trash"), DUI_T("") });
-    places.push_back({ "文件系统", DUI_T("/"), DUI_T("") });
+    places.push_back({ "废纸篓", homeDir + DUI_T("/.Trash"), "trash" });
+    places.push_back({ "文件系统", DUI_T("/"), "disk" });
 
     for (const Place& place : places) {
-        ui::Button* pItem = new ui::Button(this);
-        pItem->SetText(DString(place.label));
-        pItem->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-        pItem->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-        pItem->SetAttribute(DUI_T("text_padding"), DUI_T("10,0,10,0"));
+        // An icon and a label rather than the button's own text, so each place
+        // gets the glyph it deserves.
+        ui::ButtonHBox* pItem = new ui::ButtonHBox(this);
         pItem->SetAttribute(DUI_T("width"), DUI_T("stretch"));
         pItem->SetAttribute(DUI_T("height"), DUI_T("30"));
         pItem->SetAttribute(DUI_T("margin"), DUI_T("0,1,0,1"));
         pItem->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-        pItem->SetStateColor(ui::kControlStateNormal, kTransparent);
-        pItem->SetStateColor(ui::kControlStateHot, kRowHot);
-        pItem->SetStateTextColor(ui::kControlStateNormal, kTextBody);
+        // No hover, and no press flash either: the sidebar's one highlight is
+        // the place the window is at, which UpdateBreadcrumb sets and clears.
+        SetAllStateColors(pItem, kTransparent);
         SetRadius(pItem, 6, true);
+
+        ui::HBox* pIconCell = new ui::HBox(this);
+        pIconCell->SetAttribute(DUI_T("width"), DUI_T("30"));
+        pIconCell->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+        pIconCell->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
+        pIconCell->SetMouseEnabled(false);
+        pIconCell->AddItem(MakePlaceIcon(this, DString(place.icon)));
+        pItem->AddItem(pIconCell);
+
+        ui::Label* pText = new ui::Label(this);
+        pText->SetText(DString(place.label));
+        pText->SetAttribute(DUI_T("font"), DUI_T("system_14"));
+        pText->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
+        pText->SetStateTextColor(ui::kControlStateNormal, kTextBody);
+        pText->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        pText->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+        pText->SetMouseEnabled(false);
+        pItem->AddItem(pText);
         const DString path = place.path;
         pItem->AttachClick([this, path](const ui::EventArgs&) {
             Navigate(path);
@@ -434,8 +643,9 @@ void FilesForm::BuildSidebar(ui::HBox* pParent)
         });
         m_pSidebar->AddItem(pItem);
         m_pPlaceButtons.push_back(pItem);
+        m_placePaths.push_back(place.path);
         if (place.path == m_curDir) {
-            pItem->SetStateColor(ui::kControlStateNormal, kRowSelected);
+            SetAllStateColors(pItem, kRowSelected);
         }
     }
 
@@ -450,7 +660,12 @@ void FilesForm::BuildContent(ui::HBox* pParent)
     ui::VBox* pContent = new ui::VBox(this);
     pContent->SetAttribute(DUI_T("width"), DUI_T("stretch"));
     pContent->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-    pContent->SetAttribute(DUI_T("padding"), DUI_T("0,0,0,0"));
+    // Inset on the right so the list's scrollbar does not sit hard against the
+    // window edge: the compositor treats the outermost pixels of a window as a
+    // resize hotspot, and a bar drawn there is under the pointer's own edge
+    // rather than under the app. The headings move with the list, so the
+    // columns stay lined up.
+    pContent->SetAttribute(DUI_T("padding"), DUI_T("0,0,8,0"));
 
     // Column headings. Clicking one sorts by it and clicks again reverse it,
     // which is the one thing every file browser's list view shares.
@@ -472,8 +687,7 @@ void FilesForm::BuildContent(ui::HBox* pParent)
         pColumn->SetAttribute(DUI_T("width"),
             kColumnWidths[i] == 0 ? DUI_T("stretch") : Num(kColumnWidths[i]));
         pColumn->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-        pColumn->SetStateColor(ui::kControlStateNormal, kTransparent);
-        pColumn->SetStateColor(ui::kControlStateHot, kRowHot);
+        SetAllStateColors(pColumn, kTransparent);
         pColumn->AttachClick([this, i](const ui::EventArgs&) {
             if (m_sortColumn == i) {
                 m_sortAscending = !m_sortAscending;
@@ -495,6 +709,11 @@ void FilesForm::BuildContent(ui::HBox* pParent)
     m_pFileList->SetAttribute(DUI_T("height"), DUI_T("stretch"));
     m_pFileList->SetBkColor(kListBg);
     m_pFileList->SetBorderColor(kTransparent);
+    // Without this the pane only moves on a drag: dui builds a scroll box's
+    // bar on request rather than by default.
+    m_pFileList->EnableScrollBar(true, false);
+    m_pFileList->SetVerScrollUnitPixels(48, true);
+
     pContent->AddItem(m_pFileList);
 
     pParent->AddItem(pContent);
@@ -515,9 +734,13 @@ void FilesForm::BuildStatusBar(ui::VBox* pRoot)
     pRow->AddItem(nullptr);
     pRow->RemoveAllItems();
 
-    m_pStatusLabel = MakeStatusText(this, DUI_T(""), kTextHint, DUI_T("left,vcenter"));
+    // The path takes whatever room is left; the counts get a fixed column so
+    // neither squeezes the other off the end.
+    m_pStatusLabel = MakeStatusText(this, DUI_T(""), kTextBody, DUI_T("left,vcenter"));
+    m_pStatusLabel->SetAttribute(DUI_T("width"), DUI_T("stretch"));
     pRow->AddItem(m_pStatusLabel);
     m_pSelectionLabel = MakeStatusText(this, DUI_T(""), kTextHint, DUI_T("right,vcenter"));
+    m_pSelectionLabel->SetAttribute(DUI_T("width"), DUI_T("200"));
     pRow->AddItem(m_pSelectionLabel);
 
     pStatus->AddItem(pRow);
@@ -630,7 +853,11 @@ void FilesForm::SetIconView(bool icons)
 
 bool FilesForm::IsSelected(size_t index) const
 {
-    return std::find(m_selected.begin(), m_selected.end(), index) != m_selected.end();
+    if (index >= m_entries.size()) {
+        return false;
+    }
+    const DString& name = m_entries[index].name;
+    return std::find(m_selected.begin(), m_selected.end(), name) != m_selected.end();
 }
 
 bool FilesForm::ListDirectory(const DString& dir, std::vector<Entry>& out)
@@ -701,6 +928,24 @@ void FilesForm::ReloadList()
                   return m_sortAscending ? less : !less;
               });
 
+    // Drop names the listing no longer holds -- a file trashed or deleted
+    // since the click. Nothing would show it, but the status bar would go on
+    // counting it as selected.
+    for (size_t i = 0; i < m_selected.size();) {
+        bool found = false;
+        for (const Entry& entry : m_entries) {
+            if (entry.name == m_selected[i]) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            ++i;
+        } else {
+            m_selected.erase(m_selected.begin() + i);
+        }
+    }
+
     // Mark the column the list is ordered by, the way both browsers do.
     const char* kColumnNames[] = { "名称", "大小", "修改日期" };
     for (int i = 0; i < 3; ++i) {
@@ -719,8 +964,11 @@ void FilesForm::ReloadList()
         m_pHeaderRow->SetVisible(!m_iconView);
     }
 
+    // The selection is deliberately *not* cleared here. It is keyed by name,
+    // so it survives the re-sort and the rebuild, and this is where a click's
+    // new selection is asked to show up -- clearing it here is what made a
+    // click on a row or a tile leave no highlight anywhere.
     m_pFileList->RemoveAllItems();
-    m_selected.clear();
 
     if (m_iconView) {
         // A grid of tiles. The column count is taken from the pane's width
@@ -728,11 +976,17 @@ void FilesForm::ReloadList()
         // re-flow them into a different number of columns.
         ui::UiRect client;
         GetClientRect(client);
-        int width = client.Width() - 190;
-        if (width < kIconTileW) {
-            width = kIconTileW;
+        // Sidebar, the hairline beside it, the content's right inset, and the
+        // handful of pixels the window's own edges take.
+        int width = client.Width() - 198;
+        // A tile takes its width plus the 4px margin on either side, and the
+        // count has to allow for both: counting the tile alone fitted one
+        // column too many, and the grid ran off the window's right edge.
+        const int tileStep = kIconTileW + 8;
+        if (width < tileStep) {
+            width = tileStep;
         }
-        const int columns = std::max(1, width / kIconTileW);
+        const int columns = std::max(1, width / tileStep);
 
         ui::HBox* pRow = nullptr;
         for (size_t i = 0; i < m_entries.size(); ++i) {
@@ -749,15 +1003,21 @@ void FilesForm::ReloadList()
             pTile->SetAttribute(DUI_T("height"), Num(kIconTileH));
             pTile->SetAttribute(DUI_T("margin"), DUI_T("4,4,4,4"));
             pTile->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-            pTile->SetStateColor(ui::kControlStateNormal,
-                                 IsSelected(i) ? kRowSelected : kTransparent);
-            pTile->SetStateColor(ui::kControlStateHot, kRowHot);
+            // Selected and hot the same: the click that selects a tile leaves
+            // it hot, and the two must not disagree (see the note on hover at
+            // the top of this file).
+            SetAllStateColors(pTile, IsSelected(i) ? kRowSelected : kTransparent);
             SetRadius(pTile, 8, true);
 
             ui::HBox* pIconCell = new ui::HBox(this);
             pIconCell->SetAttribute(DUI_T("width"), Num(kIconTileW - 8));
             pIconCell->SetAttribute(DUI_T("height"), DUI_T("56"));
             pIconCell->SetAttribute(DUI_T("halign"), DUI_T("center"));
+            // The cell centres its glyph: a box packs its children at the top
+            // left unless it is told otherwise, so without this the icon sits
+            // at the left of the cell while the name below it is centred, and
+            // the two do not line up.
+            pIconCell->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
             pIconCell->SetMouseEnabled(false);
             pIconCell->AddItem(entry.isDir ? MakeFolderIcon(this, 42)
                                            : MakeFileIcon(this, 42));
@@ -785,6 +1045,7 @@ void FilesForm::ReloadList()
             });
             pRow->AddItem(pTile);
         }
+        SyncScrollRange(m_pFileList);
         UpdateStatus();
         return;
     }
@@ -796,9 +1057,7 @@ void FilesForm::ReloadList()
         pRow->SetAttribute(DUI_T("height"), Num(kRowHeight));
         pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
         pRow->SetAttribute(DUI_T("padding"), DUI_T("10,0,10,0"));
-        pRow->SetStateColor(ui::kControlStateNormal,
-                            IsSelected(i) ? kRowSelected : kTransparent);
-        pRow->SetStateColor(ui::kControlStateHot, kRowHot);
+        SetAllStateColors(pRow, IsSelected(i) ? kRowSelected : kTransparent);
         SetRadius(pRow, 6, true);
         pRow->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
 
@@ -858,6 +1117,7 @@ void FilesForm::ReloadList()
         m_pFileList->AddItem(pRow);
     }
 
+    SyncScrollRange(m_pFileList);
     UpdateStatus();
 }
 
@@ -871,22 +1131,32 @@ void FilesForm::SelectRow(size_t index, unsigned int modifiers)
     if ((modifiers & ui::kControl) != 0 || (modifiers & ui::kShift) != 0) {
         if ((modifiers & ui::kShift) != 0) {
             // A range from the anchor, the way both Explorer and Files do it.
-            const size_t from = std::min(m_anchor, index);
-            const size_t to = std::max(m_anchor, index);
+            // The anchor is a name, so it still marks the row it was clicked
+            // on even if a reload has since sorted that row elsewhere.
+            size_t anchor = index;
+            for (size_t i = 0; i < m_entries.size(); ++i) {
+                if (m_entries[i].name == m_anchor) {
+                    anchor = i;
+                    break;
+                }
+            }
+            const size_t from = std::min(anchor, index);
+            const size_t to = std::max(anchor, index);
             m_selected.clear();
             for (size_t i = from; i <= to; ++i) {
-                m_selected.push_back(i);
+                m_selected.push_back(m_entries[i].name);
             }
         } else if (IsSelected(index)) {
-            m_selected.erase(std::find(m_selected.begin(), m_selected.end(), index));
-            m_anchor = index;
+            const DString& name = m_entries[index].name;
+            m_selected.erase(std::find(m_selected.begin(), m_selected.end(), name));
+            m_anchor = name;
         } else {
-            m_selected.push_back(index);
-            m_anchor = index;
+            m_selected.push_back(m_entries[index].name);
+            m_anchor = m_entries[index].name;
         }
     } else {
-        m_selected.assign(1, index);
-        m_anchor = index;
+        m_selected.assign(1, m_entries[index].name);
+        m_anchor = m_entries[index].name;
     }
 
     ReloadList();
@@ -906,8 +1176,8 @@ void FilesForm::ShowEntryMenu(size_t index, const ui::UiPoint& pt)
         return;
     }
     m_contextIndex = index;
-    m_selected.assign(1, index);
-    m_anchor = index;
+    m_selected.assign(1, m_entries[index].name);
+    m_anchor = m_entries[index].name;
 
     m_pContextMenu->RemoveAllItems();
     const Entry& entry = m_entries[index];
@@ -916,21 +1186,22 @@ void FilesForm::ShowEntryMenu(size_t index, const ui::UiPoint& pt)
     const Action actions[] = {
         { "打开", 0 },
         { "在终端中打开", 1 },
-        { "移到废纸篓", 2 },
+        { "新建文件夹", 2 },
+        { "属性", 3 },
+        { "移到废纸篓", 4 },
     };
     for (const Action& action : actions) {
         ui::Button* pItem = new ui::Button(this);
         pItem->SetText(DString(action.label));
         pItem->SetAttribute(DUI_T("font"), DUI_T("system_14"));
         pItem->SetStateTextColor(ui::kControlStateNormal,
-                                 action.id == 2 ? DUI_T("#FFFF453A") : kTextBody);
+                                 action.id == 4 ? DUI_T("#FFFF453A") : kTextBody);
         pItem->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
         pItem->SetAttribute(DUI_T("text_padding"), DUI_T("10,0,10,0"));
         pItem->SetAttribute(DUI_T("width"), DUI_T("stretch"));
         pItem->SetAttribute(DUI_T("height"), DUI_T("30"));
         pItem->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-        pItem->SetStateColor(ui::kControlStateNormal, kTransparent);
-        pItem->SetStateColor(ui::kControlStateHot, kRowHot);
+        SetAllStateColors(pItem, kTransparent);
         SetRadius(pItem, 6, true);
         const size_t row = index;
         const int id = action.id;
@@ -946,6 +1217,10 @@ void FilesForm::ShowEntryMenu(size_t index, const ui::UiPoint& pt)
                 ShellQuote(cmd);
                 LaunchCommand(DString(DUI_T("wayst -e sh -c 'cd ")) + cmd +
                               DUI_T(" && exec bash'"));
+            } else if (id == 2) {
+                NewFolder();
+            } else if (id == 3) {
+                ShowProperties(row);
             } else {
                 TrashEntry(row);
             }
@@ -957,13 +1232,104 @@ void FilesForm::ShowEntryMenu(size_t index, const ui::UiPoint& pt)
     ui::UiRect client;
     GetClientRect(client);
     const int width = 180;
-    const int height = 6 * 2 + 30 * 3;
+    const int height = 6 * 2 + 30 * 5;
     int px = pt.x;
     int py = pt.y;
     if (px + width > client.right) px = client.right - width - 4;
     if (py + height > client.bottom) py = client.bottom - height - 4;
     if (px < 4) px = 4;
     if (py < 4) py = 4;
+    m_pContextMenu->SetAttribute(DUI_T("height"), Num(height));
+    m_pContextMenu->SetPos(ui::UiRect(px, py, px + width, py + height));
+    m_pContextMenu->SetVisible(true);
+    m_pContextMenu->Invalidate();
+}
+
+void FilesForm::ShowProperties(size_t index)
+{
+    if (m_pContextMenu == nullptr || index >= m_entries.size()) {
+        return;
+    }
+    const Entry& entry = m_entries[index];
+
+    DString full = m_curDir;
+    if (!full.empty() && full.back() != DUI_T('/')) {
+        full += DUI_T('/');
+    }
+    full += entry.name;
+
+    std::string owner;
+    struct stat st;
+    if (stat(full.c_str(), &st) == 0) {
+        char mode[16];
+        std::snprintf(mode, sizeof(mode), "%o",
+                      static_cast<unsigned>(st.st_mode & 07777));
+        owner = mode;
+    }
+
+    m_pContextMenu->RemoveAllItems();
+    ui::Label* pTitle = new ui::Label(this);
+    pTitle->SetText(entry.name);
+    pTitle->SetAttribute(DUI_T("font"), DUI_T("system_14"));
+    pTitle->SetStateTextColor(ui::kControlStateNormal, kTextDark);
+    pTitle->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
+    pTitle->SetAttribute(DUI_T("text_padding"), DUI_T("10,0,10,0"));
+    pTitle->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pTitle->SetAttribute(DUI_T("height"), DUI_T("26"));
+    pTitle->SetMouseEnabled(false);
+    m_pContextMenu->AddItem(pTitle);
+
+    struct Row { const char* label; DString value; };
+    std::vector<Row> rows;
+    rows.push_back({ "类型", entry.isDir ? DString(DUI_T("文件夹")) : DString(DUI_T("文件")) });
+    if (!entry.isDir) {
+        rows.push_back({ "大小", FormatSize(entry.size) });
+    }
+    rows.push_back({ "修改时间", entry.mtime });
+    if (!owner.empty()) {
+        rows.push_back({ "权限", DString(owner.c_str()) });
+    }
+    rows.push_back({ "位置", m_curDir });
+
+    for (const Row& row : rows) {
+        ui::HBox* pLine = new ui::HBox(this);
+        pLine->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        pLine->SetAttribute(DUI_T("height"), DUI_T("22"));
+        pLine->SetMouseEnabled(false);
+
+        ui::Label* pKey = new ui::Label(this);
+        pKey->SetText(DString(row.label));
+        pKey->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        pKey->SetStateTextColor(ui::kControlStateNormal, kTextHint);
+        pKey->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
+        pKey->SetAttribute(DUI_T("text_padding"), DUI_T("10,0,0,0"));
+        pKey->SetAttribute(DUI_T("width"), DUI_T("70"));
+        pKey->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+        pKey->SetMouseEnabled(false);
+        pLine->AddItem(pKey);
+
+        ui::Label* pValue = new ui::Label(this);
+        pValue->SetText(row.value);
+        pValue->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        pValue->SetStateTextColor(ui::kControlStateNormal, kTextBody);
+        pValue->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
+        pValue->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        pValue->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+        pValue->SetMouseEnabled(false);
+        pLine->AddItem(pValue);
+
+        m_pContextMenu->AddItem(pLine);
+    }
+
+    ui::UiRect client;
+    GetClientRect(client);
+    const int width = 300;
+    const int height = 12 + 26 + static_cast<int>(rows.size()) * 22;
+    int px = client.right - width - 40;
+    int py = 140;
+    if (px < 4) px = 4;
+    if (py + height > client.bottom) py = client.bottom - height - 8;
+    m_pContextMenu->SetAttribute(DUI_T("width"), Num(width));
     m_pContextMenu->SetAttribute(DUI_T("height"), Num(height));
     m_pContextMenu->SetPos(ui::UiRect(px, py, px + width, py + height));
     m_pContextMenu->SetVisible(true);
@@ -1096,18 +1462,32 @@ void FilesForm::UpdateBreadcrumb()
             pCrumb->SetStateTextColor(ui::kControlStateNormal,
                                       last ? kTextDark : kTextHint);
         } else {
+            // Slots past the end of the path are emptied, separator and all.
+            // They keep their width -- dui lays a control out once -- so the
+            // only thing that can make them disappear is painting nothing.
             pCrumb->SetText(DUI_T(""));
             m_crumbTargets[i] = "";
         }
     }
 
+    // One separator per gap between the segments that are actually shown, and
+    // none after the last one: m_pCrumbSeps[i-1] belongs in front of slot i.
+    for (size_t i = 0; i < m_pCrumbSeps.size(); ++i) {
+        const bool wanted = (i + 1) < shown;
+        m_pCrumbSeps[i]->SetText(wanted ? DUI_T("›") : DUI_T(""));
+    }
+
     // Highlight the deepest place the current directory sits under. Only one
     // of them: "/" is a prefix of everything, and /home/shxu is a prefix of
     // the Desktop, so a plain prefix test lights half the sidebar.
-    size_t bestLength = 0;
+    // The deepest place whose path is a prefix of the current directory -- and
+    // the path itself is what gets compared afterwards, not its length. Two
+    // places can be the same length: /home/shxu/Documents and
+    // /home/shxu/Downloads are both 21 characters, so a "length == the deepest
+    // match's length" test lit both of them whenever the window was in either.
+    const DString* best = nullptr;
     if (!m_curDir.empty()) {
-        for (ui::Button* pPlace : m_pPlaceButtons) {
-            const DString target = pPlace->GetToolTipText();
+        for (const DString& target : m_placePaths) {
             if (target.empty() || target.size() > m_curDir.size()) {
                 continue;
             }
@@ -1116,16 +1496,21 @@ void FilesForm::UpdateBreadcrumb()
             }
             const bool atBoundary = target.size() == m_curDir.size() ||
                 (target != DUI_T("/") && m_curDir[target.size()] == DUI_T('/'));
-            if (atBoundary && target.size() > bestLength) {
-                bestLength = target.size();
+            if (!atBoundary) {
+                continue;
+            }
+            if (best == nullptr || target.size() > best->size()) {
+                best = &target;
             }
         }
     }
-    for (ui::Button* pPlace : m_pPlaceButtons) {
-        const bool here = bestLength > 0 &&
-            pPlace->GetToolTipText().size() == bestLength;
-        pPlace->SetStateColor(ui::kControlStateNormal,
-                              here ? kRowSelected : kTransparent);
+    for (size_t i = 0; i < m_pPlaceButtons.size(); ++i) {
+        const bool here = best != nullptr && i < m_placePaths.size() &&
+            m_placePaths[i] == *best;
+        // Every state, and all of them cleared again when the window moves on:
+        // the highlight of the place we are at is the only one there should
+        // ever be, and a control left in some other state must not show it.
+        SetAllStateColors(m_pPlaceButtons[i], here ? kRowSelected : kTransparent);
     }
 
     if (m_pBackButton != nullptr) {
@@ -1145,16 +1530,28 @@ void FilesForm::UpdateStatus()
                 ++dirs;
             }
         }
+        m_pStatusLabel->SetText(m_curDir);
+    }
+    if (m_pSelectionLabel != nullptr) {
+        // The full path sits here rather than in a floating label over the
+        // breadcrumb: a float reports whatever size dui estimates for it and
+        // ignores the rectangle it is given, so it could never span the row.
+        // The status bar has shown the path in this browser's ancestors since
+        // Explorer 95, and it needs no dynamic sizing at all.
+        size_t dirs = 0;
+        for (const Entry& entry : m_entries) {
+            if (entry.isDir) {
+                ++dirs;
+            }
+        }
         DString text = Num(static_cast<int>(m_entries.size())) + DUI_T(" 个项目");
         if (dirs > 0) {
             text += DUI_T("（") + Num(static_cast<int>(dirs)) + DUI_T(" 个文件夹）");
         }
-        m_pStatusLabel->SetText(text);
-    }
-    if (m_pSelectionLabel != nullptr) {
-        m_pSelectionLabel->SetText(m_selected.empty()
-            ? DString(DUI_T(""))
-            : DString(DUI_T("已选 ")) + Num(static_cast<int>(m_selected.size())) + DUI_T(" 项"));
+        if (!m_selected.empty()) {
+            text += DUI_T("  已选 ") + Num(static_cast<int>(m_selected.size())) + DUI_T(" 项");
+        }
+        m_pSelectionLabel->SetText(text);
     }
 }
 
