@@ -1,10 +1,10 @@
 # PolluxOS 顶层总控 —— 注意: 各子系统的构建系统保持官方原样:
 #   FreeBSD base: bmake  base/freebsd-src/
 #   dui/polluxdesk: CMake  userland/
-# 本 Makefile 只做调度与编排。
+# 本 Makefile 只做调度与编排。用 bmake（FreeBSD 自带）；macOS 上需另装 bmake。
 # 运行环境: FreeBSD(构建 world/kernel 必须在 FreeBSD 上)。
 
-ROOT      ?= $(CURDIR)
+ROOT      ?= ${.CURDIR}
 BUILD     ?= $(ROOT)/build
 BASE      ?= $(ROOT)/base/freebsd-src
 KERNCONF  ?= POLLUXOS
@@ -12,8 +12,8 @@ DESTDIR   ?= $(BUILD)/root
 OBJPREFIX ?= $(BUILD)/obj
 PREFIX    ?= $(BUILD)/prefix
 IMG       ?= $(BUILD)/polluxos.img
-JOBS      ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8)
-MWORLDS   ?= $(shell expr $(JOBS) \* 2)
+JOBS      != sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8
+MWORLDS   != expr $(JOBS) \* 2
 
 .PHONY: all fetch world kernel dui userland image qemu clean
 
@@ -39,7 +39,7 @@ kernel: world
 # dui needs CMake >= 4.0 and FreeBSD ports/package tree stops at 3.31, so prefer
 # a locally built cmake installed as `cmake4`.  Override with e.g.
 # make CMAKE=/path/to/cmake
-CMAKE ?= $(shell command -v cmake4 2>/dev/null || echo cmake)
+CMAKE != command -v cmake4 2>/dev/null || echo cmake
 
 dui:
 	$(CMAKE) -S userland/dui -B $(BUILD)/dui -DCMAKE_BUILD_TYPE=Release \
