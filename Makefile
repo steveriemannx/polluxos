@@ -38,7 +38,8 @@ kernel: world
 # ---- dui / polluxdesk (CMake) -------------------------------------------
 dui:
 	cmake -S userland/dui -B $(BUILD)/dui -DCMAKE_BUILD_TYPE=Release \
-	    -DDUI_ENABLE_WAYLAND=ON -DDUI_ENABLE_SDL=OFF
+	    -DDUI_ENABLE_WAYLAND=ON -DDUI_ENABLE_SDL=OFF \
+	    -DDUI_BUILD_EXAMPLES=OFF
 	cmake --build $(BUILD)/dui -j$(JOBS)
 	cmake --install $(BUILD)/dui --prefix $(PREFIX)
 
