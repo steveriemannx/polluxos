@@ -5,4 +5,4 @@
 [submodule "userland/dui"]
 	path = userland/dui
 	url = ssh://shxu@192.168.137.184/~/projects-main/dui-dev
-	branch = polluxos-dev
+	branch = dev-polluxos
