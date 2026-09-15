@@ -36,18 +36,23 @@ kernel: world
 	    make -C $(BASE) buildkernel KERNCONF=$(KERNCONF) -j$(JOBS)
 
 # ---- dui / polluxdesk (CMake) -------------------------------------------
+# dui needs CMake >= 4.0 and FreeBSD ports/package tree stops at 3.31, so prefer
+# a locally built cmake installed as `cmake4`.  Override with e.g.
+# make CMAKE=/path/to/cmake
+CMAKE ?= $(shell command -v cmake4 2>/dev/null || echo cmake)
+
 dui:
-	cmake -S userland/dui -B $(BUILD)/dui -DCMAKE_BUILD_TYPE=Release \
+	$(CMAKE) -S userland/dui -B $(BUILD)/dui -DCMAKE_BUILD_TYPE=Release \
 	    -DDUI_ENABLE_WAYLAND=ON -DDUI_ENABLE_SDL=OFF \
 	    -DDUI_BUILD_EXAMPLES=OFF
-	cmake --build $(BUILD)/dui -j$(JOBS)
-	cmake --install $(BUILD)/dui --prefix $(PREFIX)
+	$(CMAKE) --build $(BUILD)/dui -j$(JOBS)
+	$(CMAKE) --install $(BUILD)/dui --prefix $(PREFIX)
 
 userland: dui
-	cmake -S userland/polluxdesk -B $(BUILD)/polluxdesk -DCMAKE_BUILD_TYPE=Release \
+	$(CMAKE) -S userland/polluxdesk -B $(BUILD)/polluxdesk -DCMAKE_BUILD_TYPE=Release \
 	    -DCMAKE_PREFIX_PATH=$(PREFIX) -DDUI_ROOT=$(PREFIX)
-	cmake --build $(BUILD)/polluxdesk -j$(JOBS)
-	cmake --install $(BUILD)/polluxdesk --prefix $(PREFIX)
+	$(CMAKE) --build $(BUILD)/polluxdesk -j$(JOBS)
+	$(CMAKE) --install $(BUILD)/polluxdesk --prefix $(PREFIX)
 
 # ---- 镜像 ---------------------------------------------------------------
 image: kernel userland
