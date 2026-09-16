@@ -1,6 +1,6 @@
 #!/bin/sh
 # 直接启动构建出的 polluxos.img，验证开发。
-# 在 macOS 上 qemu 可有 cocoa 显示; FreeBSD 上默认 gtk/sdl。
+# 在 macOS 上 qemu 可有 cocoa 显示; FreeBSD 上默认 gtk。
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMG="${IMG:-$ROOT/build/polluxos.img}"
