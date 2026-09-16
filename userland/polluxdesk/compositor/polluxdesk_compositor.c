@@ -541,11 +541,24 @@ static struct wlr_buffer *corner_mask_buffer_create(
 	return &buf->base;
 }
 
+/* Prefer the internal panel.  The list is filled in connector-discovery order
+ * (wl_list_insert puts each new output at the front), so an external monitor
+ * could otherwise decide the size of the desktop shell -- a 1280x800 HDMI
+ * panel made the shell draw itself at 1280x800 on a 1920x1080 laptop panel,
+ * leaving the titlebar and dock laid out for the wrong screen.  Fall back to
+ * the list order when there is no eDP. */
 static struct wlr_output *server_get_primary_output(struct polluxdesk_server *server) {
 	if (wl_list_empty(&server->outputs)) {
 		return NULL;
 	}
-	struct polluxdesk_output *output = wl_container_of(server->outputs.next, output, link);
+	struct polluxdesk_output *output;
+	wl_list_for_each(output, &server->outputs, link) {
+		const char *name = output->wlr_output->name;
+		if (name != NULL && strncmp(name, "eDP", 3) == 0) {
+			return output->wlr_output;
+		}
+	}
+	output = wl_container_of(server->outputs.next, output, link);
 	return output->wlr_output;
 }
 
