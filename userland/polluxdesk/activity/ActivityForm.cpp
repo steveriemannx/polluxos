@@ -18,26 +18,26 @@ const int kHistoryLength = 120;
 const int kMaxDiskRows   = 4;
 const int kMaxNetRows    = 4;
 
-DString Num(long long value)
+U8String Num(long long value)
 {
-    return ui::StringUtil::Printf(DUI_T("%lld"), value);
+    return ui::StringUtil::Printf("%lld", value);
 }
 
-DString FormatDouble(double value, const char* format)
+U8String FormatDouble(double value, const char* format)
 {
     char buffer[64];
     std::snprintf(buffer, sizeof(buffer), format, value);
-    return DString(buffer);
+    return U8String(buffer);
 }
 
 // "#AARRGGBB" with a different alpha: the fill under a graph line is the line's
 // own colour, faded.
-DString WithAlpha(const DString& colour, const char* alpha)
+U8String WithAlpha(const U8String& colour, const char* alpha)
 {
-    if (colour.size() != 9 || colour[0] != DUI_T('#')) {
+    if (colour.size() != 9 || colour[0] != '#') {
         return colour;
     }
-    return DString(DUI_T("#")) + DString(alpha) + colour.substr(3);
+    return U8String("#") + U8String(alpha) + colour.substr(3);
 }
 
 const char* kPanelTitles[] = { "CPU", "内存", "磁盘", "网络" };
@@ -76,8 +76,8 @@ ActivityForm::~ActivityForm()
     }
 }
 
-DString ActivityForm::GetSkinFolder() { return DUI_T(""); }
-DString ActivityForm::GetSkinFile()   { return DUI_T(""); }
+U8String ActivityForm::GetSkinFolder() { return ""; }
+U8String ActivityForm::GetSkinFile()   { return ""; }
 
 void ActivityForm::GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs)
 {
@@ -178,49 +178,49 @@ void ActivityForm::RebuildUi()
 void ActivityForm::ApplyAppearance()
 {
     const bool dark = pollux::IsDark(m_settings);
-    m_pal.accent = DString(pollux::AccentHex(m_settings));
-    m_pal.textOnAccent = DUI_T("#FFFFFFFF");
+    m_pal.accent = U8String(pollux::AccentHex(m_settings));
+    m_pal.textOnAccent = "#FFFFFFFF";
 
     if (dark) {
-        m_pal.windowBg      = DUI_T("#FF1C1C1E");
-        m_pal.cardBg        = DUI_T("#FF2C2C2E");
-        m_pal.cardBorder    = DUI_T("#26FFFFFF");
-        m_pal.headerBg      = DUI_T("#FF242426");
-        m_pal.rowAlternate  = DUI_T("#0DFFFFFF");
-        m_pal.hairline      = DUI_T("#26FFFFFF");
-        m_pal.textStrong    = DUI_T("#FFF5F5F7");
-        m_pal.textBody      = DUI_T("#FFD8D8DC");
-        m_pal.textHint      = DUI_T("#FF98989D");
-        m_pal.track         = DUI_T("#33FFFFFF");
-        m_pal.grid          = DUI_T("#1FFFFFFF");
-        m_pal.tabTrack      = DUI_T("#1FFFFFFF");
-        m_pal.cpuUser       = DUI_T("#FF0A84FF");
-        m_pal.cpuSystem     = DUI_T("#FFFF453A");
-        m_pal.memUsed       = DUI_T("#FF32D74B");
-        m_pal.diskFill      = DUI_T("#FF0A84FF");
-        m_pal.diskFull      = DUI_T("#FFFF453A");
-        m_pal.netDown       = DUI_T("#FF32D74B");
-        m_pal.netUp         = DUI_T("#FFFF9F0A");
+        m_pal.windowBg      = "#FF1C1C1E";
+        m_pal.cardBg        = "#FF2C2C2E";
+        m_pal.cardBorder    = "#26FFFFFF";
+        m_pal.headerBg      = "#FF242426";
+        m_pal.rowAlternate  = "#0DFFFFFF";
+        m_pal.hairline      = "#26FFFFFF";
+        m_pal.textStrong    = "#FFF5F5F7";
+        m_pal.textBody      = "#FFD8D8DC";
+        m_pal.textHint      = "#FF98989D";
+        m_pal.track         = "#33FFFFFF";
+        m_pal.grid          = "#1FFFFFFF";
+        m_pal.tabTrack      = "#1FFFFFFF";
+        m_pal.cpuUser       = "#FF0A84FF";
+        m_pal.cpuSystem     = "#FFFF453A";
+        m_pal.memUsed       = "#FF32D74B";
+        m_pal.diskFill      = "#FF0A84FF";
+        m_pal.diskFull      = "#FFFF453A";
+        m_pal.netDown       = "#FF32D74B";
+        m_pal.netUp         = "#FFFF9F0A";
     } else {
-        m_pal.windowBg      = DUI_T("#FFF2F2F7");
-        m_pal.cardBg        = DUI_T("#FFFFFFFF");
-        m_pal.cardBorder    = DUI_T("#22000000");
-        m_pal.headerBg      = DUI_T("#FFF7F7F9");
-        m_pal.rowAlternate  = DUI_T("#0A000000");
-        m_pal.hairline      = DUI_T("#22000000");
-        m_pal.textStrong    = DUI_T("#FF1D1D1F");
-        m_pal.textBody      = DUI_T("#FF3A3A3C");
-        m_pal.textHint      = DUI_T("#FF8E8E93");
-        m_pal.track         = DUI_T("#1F000000");
-        m_pal.grid          = DUI_T("#14000000");
-        m_pal.tabTrack      = DUI_T("#14000000");
-        m_pal.cpuUser       = DUI_T("#FF007AFF");
-        m_pal.cpuSystem     = DUI_T("#FFFF3B30");
-        m_pal.memUsed       = DUI_T("#FF34C759");
-        m_pal.diskFill      = DUI_T("#FF007AFF");
-        m_pal.diskFull      = DUI_T("#FFFF3B30");
-        m_pal.netDown       = DUI_T("#FF34C759");
-        m_pal.netUp         = DUI_T("#FFFF9500");
+        m_pal.windowBg      = "#FFF2F2F7";
+        m_pal.cardBg        = "#FFFFFFFF";
+        m_pal.cardBorder    = "#22000000";
+        m_pal.headerBg      = "#FFF7F7F9";
+        m_pal.rowAlternate  = "#0A000000";
+        m_pal.hairline      = "#22000000";
+        m_pal.textStrong    = "#FF1D1D1F";
+        m_pal.textBody      = "#FF3A3A3C";
+        m_pal.textHint      = "#FF8E8E93";
+        m_pal.track         = "#1F000000";
+        m_pal.grid          = "#14000000";
+        m_pal.tabTrack      = "#14000000";
+        m_pal.cpuUser       = "#FF007AFF";
+        m_pal.cpuSystem     = "#FFFF3B30";
+        m_pal.memUsed       = "#FF34C759";
+        m_pal.diskFill      = "#FF007AFF";
+        m_pal.diskFull      = "#FFFF3B30";
+        m_pal.netDown       = "#FF34C759";
+        m_pal.netUp         = "#FFFF9500";
     }
 }
 
@@ -237,59 +237,59 @@ void ActivityForm::SetRadius(ui::Control* pControl, int radius, bool interactive
         pControl->SetStateColorRound(ui::kControlStateHot, size, false);
         pControl->SetStateColorRound(ui::kControlStatePushed, size, false);
     }
-    pControl->SetAttribute(DUI_T("border_round"),
-                           ui::StringUtil::Printf(DUI_T("%d,%d"), radius, radius));
+    pControl->SetAttribute("border_round",
+                           ui::StringUtil::Printf("%d,%d", radius, radius));
 }
 
-ui::Label* ActivityForm::AddLabel(ui::Box* pParent, const DString& text,
-                                  const DString& font, const DString& colour)
+ui::Label* ActivityForm::AddLabel(ui::Box* pParent, const U8String& text,
+                                  const U8String& font, const U8String& colour)
 {
     ui::Label* pLabel = new ui::Label(this);
     pLabel->SetText(text);
-    pLabel->SetAttribute(DUI_T("font"), font);
+    pLabel->SetAttribute("font", font);
     // SetStateTextColor rather than the "text_color" attribute: that attribute
     // does not exist for a label, and dui falls back to a default colour, which
     // is how a window ends up unreadable the moment the desktop goes dark.
     pLabel->SetStateTextColor(ui::kControlStateNormal, colour);
-    pLabel->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
+    pLabel->SetAttribute("text_align", "left,vcenter");
     pLabel->SetMouseEnabled(false);
     pParent->AddItem(pLabel);
     return pLabel;
 }
 
-ui::VBox* ActivityForm::AddCard(ui::Box* pParent, const DString& height)
+ui::VBox* ActivityForm::AddCard(ui::Box* pParent, const U8String& height)
 {
     ui::VBox* pCard = new ui::VBox(this);
-    pCard->SetAttribute(DUI_T("height"), height);
-    pCard->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pCard->SetAttribute("height", height);
+    pCard->SetAttribute("width", "stretch");
     pCard->SetBkColor(m_pal.cardBg);
     pCard->SetBorderColor(m_pal.cardBorder);
-    pCard->SetAttribute(DUI_T("border_size"), DUI_T("1"));
-    pCard->SetAttribute(DUI_T("padding"), DUI_T("8,6,8,6"));
+    pCard->SetAttribute("border_size", "1");
+    pCard->SetAttribute("padding", "8,6,8,6");
     SetRadius(pCard, 10, false);
     pParent->AddItem(pCard);
     return pCard;
 }
 
-ui::Label* ActivityForm::AddLegend(ui::Box* pParent, const DString& colour,
-                                   const DString& text, const DString& width)
+ui::Label* ActivityForm::AddLegend(ui::Box* pParent, const U8String& colour,
+                                   const U8String& text, const U8String& width)
 {
     ui::HBox* pItem = new ui::HBox(this);
-    pItem->SetAttribute(DUI_T("width"), width);
-    pItem->SetAttribute(DUI_T("height"), DUI_T("22"));
-    pItem->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
+    pItem->SetAttribute("width", width);
+    pItem->SetAttribute("height", "22");
+    pItem->SetAttribute("child_align", "vcenter");
 
     ui::Control* pDot = new ui::Control(this);
-    pDot->SetAttribute(DUI_T("width"), DUI_T("8"));
-    pDot->SetAttribute(DUI_T("height"), DUI_T("8"));
-    pDot->SetAttribute(DUI_T("margin"), DUI_T("0,0,6,0"));
+    pDot->SetAttribute("width", "8");
+    pDot->SetAttribute("height", "8");
+    pDot->SetAttribute("margin", "0,0,6,0");
     pDot->SetBkColor(colour);
     SetRadius(pDot, 4, false);
     pDot->SetMouseEnabled(false);
     pItem->AddItem(pDot);
 
-    ui::Label* pLabel = AddLabel(pItem, text, DUI_T("system_12"), m_pal.textBody);
-    pLabel->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    ui::Label* pLabel = AddLabel(pItem, text, "system_12", m_pal.textBody);
+    pLabel->SetAttribute("width", "stretch");
     pParent->AddItem(pItem);
     return pLabel;
 }
@@ -329,27 +329,27 @@ void ActivityForm::BuildUi()
 
     ui::VBox* pRoot = new ui::VBox(this);
     pRoot->SetBkColor(m_pal.windowBg);
-    pRoot->SetBorderColor(DUI_T("#00000000"));
-    pRoot->SetAttribute(DUI_T("border_size"), DUI_T("0"));
-    pRoot->SetAttribute(DUI_T("padding"), DUI_T("0,0,0,0"));
+    pRoot->SetBorderColor("#00000000");
+    pRoot->SetAttribute("border_size", "0");
+    pRoot->SetAttribute("padding", "0,0,0,0");
 
     BuildHeader(pRoot);
 
     ui::Control* pHairline = new ui::Control(this);
-    pHairline->SetAttribute(DUI_T("height"), DUI_T("1"));
-    pHairline->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pHairline->SetAttribute("height", "1");
+    pHairline->SetAttribute("width", "stretch");
     pHairline->SetBkColor(m_pal.hairline);
     pHairline->SetMouseEnabled(false);
     pRoot->AddItem(pHairline);
 
     ui::VBox* pBody = new ui::VBox(this);
-    pBody->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-    pBody->SetAttribute(DUI_T("padding"), DUI_T("16,10,16,6"));
+    pBody->SetAttribute("height", "stretch");
+    pBody->SetAttribute("padding", "16,10,16,6");
     pRoot->AddItem(pBody);
 
     m_pPanelHost = new ui::VBox(this);
-    m_pPanelHost->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-    m_pPanelHost->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    m_pPanelHost->SetAttribute("height", "stretch");
+    m_pPanelHost->SetAttribute("width", "stretch");
     pBody->AddItem(m_pPanelHost);
 
     BuildProcessCard(pBody);
@@ -364,32 +364,32 @@ void ActivityForm::BuildUi()
 void ActivityForm::BuildHeader(ui::VBox* pRoot)
 {
     m_pHeader = new ui::HBox(this);
-    m_pHeader->SetAttribute(DUI_T("height"), DUI_T("56"));
+    m_pHeader->SetAttribute("height", "56");
     m_pHeader->SetBkColor(m_pal.windowBg);
-    m_pHeader->SetAttribute(DUI_T("padding"), DUI_T("16,0,16,0"));
-    m_pHeader->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
+    m_pHeader->SetAttribute("padding", "16,0,16,0");
+    m_pHeader->SetAttribute("child_align", "vcenter");
     pRoot->AddItem(m_pHeader);
 
     // A segmented control, built out of buttons: dui's own Combo opens a second
     // window, and this backend routes input to one window per process.
     m_pTabs = new ui::HBox(this);
-    m_pTabs->SetAttribute(DUI_T("width"), DUI_T("auto"));
-    m_pTabs->SetAttribute(DUI_T("height"), DUI_T("32"));
+    m_pTabs->SetAttribute("width", "auto");
+    m_pTabs->SetAttribute("height", "32");
     m_pTabs->SetBkColor(m_pal.tabTrack);
-    m_pTabs->SetAttribute(DUI_T("padding"), DUI_T("2,2,2,2"));
-    m_pTabs->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
+    m_pTabs->SetAttribute("padding", "2,2,2,2");
+    m_pTabs->SetAttribute("child_align", "vcenter");
     SetRadius(m_pTabs, 8, false);
     m_pHeader->AddItem(m_pTabs);
 
     for (int i = 0; i < kPanelCount; ++i) {
         ui::Button* pTab = new ui::Button(this);
-        pTab->SetText(DString(kPanelTitles[i]));
-        pTab->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-        pTab->SetAttribute(DUI_T("width"), DUI_T("78"));
-        pTab->SetAttribute(DUI_T("height"), DUI_T("26"));
-        pTab->SetAttribute(DUI_T("margin"), DUI_T("2,0,2,0"));
-        pTab->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
-        pTab->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pTab->SetText(U8String(kPanelTitles[i]));
+        pTab->SetAttribute("font", "system_14");
+        pTab->SetAttribute("width", "78");
+        pTab->SetAttribute("height", "26");
+        pTab->SetAttribute("margin", "2,0,2,0");
+        pTab->SetAttribute("text_align", "hcenter,vcenter");
+        pTab->SetAttribute("cursor_type", "hand");
         SetRadius(pTab, 6, true);
         pTab->AttachClick([this, i](const ui::EventArgs& /*args*/) {
             if (m_panel != i) {
@@ -404,19 +404,19 @@ void ActivityForm::BuildHeader(ui::VBox* pRoot)
     }
 
     ui::Control* pSpacer = new ui::Control(this);
-    pSpacer->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pSpacer->SetAttribute("width", "stretch");
     pSpacer->SetMouseEnabled(false);
     m_pHeader->AddItem(pSpacer);
 
-    m_pHostLabel = AddLabel(m_pHeader, DUI_T(""), DUI_T("system_12"), m_pal.textHint);
-    m_pHostLabel->SetAttribute(DUI_T("width"), DUI_T("auto"));
-    m_pHostLabel->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
-    DString host = m_hostName.empty() ? DString(DUI_T("本机")) : DString(m_hostName.c_str());
+    m_pHostLabel = AddLabel(m_pHeader, "", "system_12", m_pal.textHint);
+    m_pHostLabel->SetAttribute("width", "auto");
+    m_pHostLabel->SetAttribute("text_align", "right,vcenter");
+    U8String host = m_hostName.empty() ? U8String("本机") : U8String(m_hostName.c_str());
     if (m_cpu.ncpu > 0) {
-        host += DUI_T(" · ") + Num(m_cpu.ncpu) + DUI_T(" 核");
+        host += " · " + Num(m_cpu.ncpu) + " 核";
     }
     if (m_mem.total > 0) {
-        host += DUI_T(" · ") + FormatBytes(m_mem.total) + DUI_T(" 内存");
+        host += " · " + FormatBytes(m_mem.total) + " 内存";
     }
     m_pHostLabel->SetText(host);
 }
@@ -424,36 +424,36 @@ void ActivityForm::BuildHeader(ui::VBox* pRoot)
 void ActivityForm::BuildProcessCard(ui::VBox* pRoot)
 {
     ui::VBox* pCard = new ui::VBox(this);
-    pCard->SetAttribute(DUI_T("height"), Num(30 + kProcessRows * 22));
-    pCard->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pCard->SetAttribute("height", Num(30 + kProcessRows * 22));
+    pCard->SetAttribute("width", "stretch");
     pCard->SetBkColor(m_pal.cardBg);
     pCard->SetBorderColor(m_pal.cardBorder);
-    pCard->SetAttribute(DUI_T("border_size"), DUI_T("1"));
-    pCard->SetAttribute(DUI_T("padding"), DUI_T("6,0,6,4"));
-    pCard->SetAttribute(DUI_T("margin"), DUI_T("0,8,0,0"));
+    pCard->SetAttribute("border_size", "1");
+    pCard->SetAttribute("padding", "6,0,6,4");
+    pCard->SetAttribute("margin", "0,8,0,0");
     SetRadius(pCard, 10, false);
     pRoot->AddItem(pCard);
 
     // Column titles, each one a button that sorts by its column.
     ui::HBox* pHeaderRow = new ui::HBox(this);
-    pHeaderRow->SetAttribute(DUI_T("height"), DUI_T("26"));
-    pHeaderRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pHeaderRow->SetAttribute("height", "26");
+    pHeaderRow->SetAttribute("width", "stretch");
     pHeaderRow->SetBkColor(m_pal.headerBg);
     pHeaderRow->SetBorderColor(m_pal.hairline);
-    pHeaderRow->SetAttribute(DUI_T("bottom_border_size"), DUI_T("1"));
-    pHeaderRow->SetAttribute(DUI_T("padding"), DUI_T("6,0,6,0"));
+    pHeaderRow->SetAttribute("bottom_border_size", "1");
+    pHeaderRow->SetAttribute("padding", "6,0,6,0");
     SetRadius(pHeaderRow, 6, false);
     pCard->AddItem(pHeaderRow);
 
     for (int c = 0; c < kColCount; ++c) {
         ui::Button* pColumn = new ui::Button(this);
-        pColumn->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        pColumn->SetAttribute("font", "system_12");
         pColumn->SetStateTextColor(ui::kControlStateNormal, m_pal.textHint);
-        pColumn->SetAttribute(DUI_T("text_align"), DString(kColumnDefs[c].align));
-        pColumn->SetAttribute(DUI_T("width"), DString(kColumnDefs[c].width));
-        pColumn->SetAttribute(DUI_T("height"), DUI_T("24"));
-        pColumn->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-        pColumn->SetStateColor(ui::kControlStateNormal, DUI_T("#00000000"));
+        pColumn->SetAttribute("text_align", U8String(kColumnDefs[c].align));
+        pColumn->SetAttribute("width", U8String(kColumnDefs[c].width));
+        pColumn->SetAttribute("height", "24");
+        pColumn->SetAttribute("cursor_type", "hand");
+        pColumn->SetStateColor(ui::kControlStateNormal, "#00000000");
         pColumn->SetStateColor(ui::kControlStateHot, m_pal.hairline);
         SetRadius(pColumn, 5, true);
         const int column = c;
@@ -464,10 +464,10 @@ void ActivityForm::BuildProcessCard(ui::VBox* pRoot)
         pHeaderRow->AddItem(pColumn);
         m_pColumnButtons[c] = pColumn;
     }
-    m_pProcessEmpty = AddLabel(pCard, DUI_T("没有可显示的进程"), DUI_T("system_12"),
+    m_pProcessEmpty = AddLabel(pCard, "没有可显示的进程", "system_12",
                                m_pal.textHint);
-    m_pProcessEmpty->SetAttribute(DUI_T("height"), DUI_T("0"));
-    m_pProcessEmpty->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    m_pProcessEmpty->SetAttribute("height", "0");
+    m_pProcessEmpty->SetAttribute("width", "stretch");
 
     // The rows are built once and only ever have their text rewritten: dui
     // lays a control out at build time, so a row created later would have no
@@ -475,18 +475,18 @@ void ActivityForm::BuildProcessCard(ui::VBox* pRoot)
     for (int r = 0; r < kProcessRows; ++r) {
         ProcessRow row;
         row.box = new ui::HBox(this);
-        row.box->SetAttribute(DUI_T("height"), DUI_T("22"));
-        row.box->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        row.box->SetAttribute(DUI_T("padding"), DUI_T("6,0,6,0"));
-        row.box->SetBkColor((r % 2) != 0 ? m_pal.rowAlternate : DUI_T("#00000000"));
+        row.box->SetAttribute("height", "22");
+        row.box->SetAttribute("width", "stretch");
+        row.box->SetAttribute("padding", "6,0,6,0");
+        row.box->SetBkColor((r % 2) != 0 ? m_pal.rowAlternate : "#00000000");
         row.box->SetMouseEnabled(false);
         pCard->AddItem(row.box);
 
         for (int c = 0; c < kColCount; ++c) {
-            ui::Label* pCell = AddLabel(row.box, DUI_T(""), DUI_T("system_12"),
+            ui::Label* pCell = AddLabel(row.box, "", "system_12",
                                         m_pal.textBody);
-            pCell->SetAttribute(DUI_T("width"), DString(kColumnDefs[c].width));
-            pCell->SetAttribute(DUI_T("text_align"), DString(kColumnDefs[c].align));
+            pCell->SetAttribute("width", U8String(kColumnDefs[c].width));
+            pCell->SetAttribute("text_align", U8String(kColumnDefs[c].align));
             row.cells[c] = pCell;
         }
         m_processRows.push_back(row);
@@ -498,18 +498,18 @@ void ActivityForm::BuildProcessCard(ui::VBox* pRoot)
 void ActivityForm::BuildStatusBar(ui::VBox* pRoot)
 {
     ui::HBox* pBar = new ui::HBox(this);
-    pBar->SetAttribute(DUI_T("height"), DUI_T("28"));
+    pBar->SetAttribute("height", "28");
     pBar->SetBkColor(m_pal.windowBg);
-    pBar->SetAttribute(DUI_T("padding"), DUI_T("16,0,16,0"));
+    pBar->SetAttribute("padding", "16,0,16,0");
     pRoot->AddItem(pBar);
 
-    m_pStatusLeft = AddLabel(pBar, DUI_T(""), DUI_T("system_12"), m_pal.textHint);
-    m_pStatusLeft->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    m_pStatusLeft = AddLabel(pBar, "", "system_12", m_pal.textHint);
+    m_pStatusLeft->SetAttribute("width", "stretch");
 
-    m_pStatusRight = AddLabel(pBar, DUI_T("每 1 秒刷新"), DUI_T("system_12"),
+    m_pStatusRight = AddLabel(pBar, "每 1 秒刷新", "system_12",
                               m_pal.textHint);
-    m_pStatusRight->SetAttribute(DUI_T("width"), DUI_T("auto"));
-    m_pStatusRight->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+    m_pStatusRight->SetAttribute("width", "auto");
+    m_pStatusRight->SetAttribute("text_align", "right,vcenter");
 }
 
 // ---------------------------------------------------------------------------
@@ -560,7 +560,7 @@ void ActivityForm::UpdateTabStyles()
         }
         const bool selected = (i == m_panel);
         pTab->SetStateColor(ui::kControlStateNormal,
-                            selected ? m_pal.accent : DUI_T("#00000000"));
+                            selected ? m_pal.accent : "#00000000");
         pTab->SetStateColor(ui::kControlStateHot,
                             selected ? m_pal.accent : m_pal.hairline);
         pTab->SetStateTextColor(ui::kControlStateNormal,
@@ -571,23 +571,23 @@ void ActivityForm::UpdateTabStyles()
 void ActivityForm::BuildCpuPanel(ui::VBox* pPanel)
 {
     ui::HBox* pTitleRow = new ui::HBox(this);
-    pTitleRow->SetAttribute(DUI_T("height"), DUI_T("26"));
-    pTitleRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pTitleRow->SetAttribute("height", "26");
+    pTitleRow->SetAttribute("width", "stretch");
     pPanel->AddItem(pTitleRow);
 
-    ui::Label* pTitle = AddLabel(pTitleRow, DUI_T("CPU 负载"), DUI_T("system_bold_16"),
+    ui::Label* pTitle = AddLabel(pTitleRow, "CPU 负载", "system_bold_16",
                                  m_pal.textStrong);
-    pTitle->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pTitle->SetAttribute("width", "stretch");
 
-    m_pCpuLoad = AddLabel(pTitleRow, DUI_T(""), DUI_T("system_12"), m_pal.textHint);
-    m_pCpuLoad->SetAttribute(DUI_T("width"), DUI_T("360"));
-    m_pCpuLoad->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+    m_pCpuLoad = AddLabel(pTitleRow, "", "system_12", m_pal.textHint);
+    m_pCpuLoad->SetAttribute("width", "360");
+    m_pCpuLoad->SetAttribute("text_align", "right,vcenter");
 
-    ui::VBox* pGraphCard = AddCard(pPanel, DUI_T("stretch"));
-    pGraphCard->SetAttribute(DUI_T("margin"), DUI_T("0,4,0,6"));
+    ui::VBox* pGraphCard = AddCard(pPanel, "stretch");
+    pGraphCard->SetAttribute("margin", "0,4,0,6");
     m_pCpuGraph = new activity::HistoryGraph(this);
-    m_pCpuGraph->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-    m_pCpuGraph->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    m_pCpuGraph->SetAttribute("height", "stretch");
+    m_pCpuGraph->SetAttribute("width", "stretch");
     m_pCpuGraph->SetBkColor(m_pal.cardBg);
     m_pCpuGraph->SetColours(m_pal.cpuUser, WithAlpha(m_pal.cpuUser, "55"),
                             WithAlpha(m_pal.cpuUser, "00"), m_pal.grid);
@@ -595,17 +595,17 @@ void ActivityForm::BuildCpuPanel(ui::VBox* pPanel)
 
     // Legend: the readings the graph is made of.
     ui::HBox* pLegend = new ui::HBox(this);
-    pLegend->SetAttribute(DUI_T("height"), DUI_T("24"));
-    pLegend->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pLegend->SetAttribute("height", "24");
+    pLegend->SetAttribute("width", "stretch");
     pPanel->AddItem(pLegend);
-    m_pCpuLegend.push_back(AddLegend(pLegend, m_pal.cpuUser, DUI_T("用户 —"),
-                                     DUI_T("120")));
-    m_pCpuLegend.push_back(AddLegend(pLegend, m_pal.cpuSystem, DUI_T("系统 —"),
-                                     DUI_T("120")));
-    m_pCpuLegend.push_back(AddLegend(pLegend, m_pal.textHint, DUI_T("空闲 —"),
-                                     DUI_T("120")));
-    m_pCpuLegend.push_back(AddLegend(pLegend, m_pal.netUp, DUI_T("温度 —"),
-                                     DUI_T("stretch")));
+    m_pCpuLegend.push_back(AddLegend(pLegend, m_pal.cpuUser, "用户 —",
+                                     "120"));
+    m_pCpuLegend.push_back(AddLegend(pLegend, m_pal.cpuSystem, "系统 —",
+                                     "120"));
+    m_pCpuLegend.push_back(AddLegend(pLegend, m_pal.textHint, "空闲 —",
+                                     "120"));
+    m_pCpuLegend.push_back(AddLegend(pLegend, m_pal.netUp, "温度 —",
+                                     "stretch"));
 
     // One row per core, in as many columns as it takes.  Built at the size it
     // will keep: the bars change fill, never geometry.
@@ -614,14 +614,14 @@ void ActivityForm::BuildCpuPanel(ui::VBox* pPanel)
     const int rows = (ncpu + columns - 1) / columns;
 
     ui::HBox* pCores = new ui::HBox(this);
-    pCores->SetAttribute(DUI_T("height"), Num(rows * 20));
-    pCores->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pCores->SetAttribute("height", Num(rows * 20));
+    pCores->SetAttribute("width", "stretch");
     pPanel->AddItem(pCores);
 
     for (int column = 0; column < columns; ++column) {
         ui::VBox* pColumn = new ui::VBox(this);
-        pColumn->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pColumn->SetAttribute(DUI_T("margin"), DUI_T("0,0,8,0"));
+        pColumn->SetAttribute("width", "stretch");
+        pColumn->SetAttribute("margin", "0,0,8,0");
         pCores->AddItem(pColumn);
 
         for (int row = 0; row < rows; ++row) {
@@ -630,26 +630,26 @@ void ActivityForm::BuildCpuPanel(ui::VBox* pPanel)
                 break;
             }
             ui::HBox* pRow = new ui::HBox(this);
-            pRow->SetAttribute(DUI_T("height"), DUI_T("20"));
-            pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-            pRow->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
+            pRow->SetAttribute("height", "20");
+            pRow->SetAttribute("width", "stretch");
+            pRow->SetAttribute("child_align", "vcenter");
             pColumn->AddItem(pRow);
 
-            ui::Label* pName = AddLabel(pRow, DUI_T("CPU ") + Num(core),
-                                        DUI_T("system_12"), m_pal.textHint);
-            pName->SetAttribute(DUI_T("width"), DUI_T("52"));
+            ui::Label* pName = AddLabel(pRow, "CPU " + Num(core),
+                                        "system_12", m_pal.textHint);
+            pName->SetAttribute("width", "52");
 
             activity::MeterBar* pBar = new activity::MeterBar(this);
-            pBar->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-            pBar->SetAttribute(DUI_T("height"), DUI_T("8"));
+            pBar->SetAttribute("width", "stretch");
+            pBar->SetAttribute("height", "8");
             pBar->SetColours(m_pal.track, m_pal.cpuUser);
             pRow->AddItem(pBar);
             m_pCoreBars.push_back(pBar);
 
-            ui::Label* pReading = AddLabel(pRow, DUI_T("—"), DUI_T("system_12"),
+            ui::Label* pReading = AddLabel(pRow, "—", "system_12",
                                            m_pal.textBody);
-            pReading->SetAttribute(DUI_T("width"), DUI_T("46"));
-            pReading->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+            pReading->SetAttribute("width", "46");
+            pReading->SetAttribute("text_align", "right,vcenter");
             m_pCoreReadings.push_back(pReading);
         }
     }
@@ -658,23 +658,23 @@ void ActivityForm::BuildCpuPanel(ui::VBox* pPanel)
 void ActivityForm::BuildMemoryPanel(ui::VBox* pPanel)
 {
     ui::HBox* pTitleRow = new ui::HBox(this);
-    pTitleRow->SetAttribute(DUI_T("height"), DUI_T("26"));
-    pTitleRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pTitleRow->SetAttribute("height", "26");
+    pTitleRow->SetAttribute("width", "stretch");
     pPanel->AddItem(pTitleRow);
 
-    ui::Label* pTitle = AddLabel(pTitleRow, DUI_T("内存压力"), DUI_T("system_bold_16"),
+    ui::Label* pTitle = AddLabel(pTitleRow, "内存压力", "system_bold_16",
                                  m_pal.textStrong);
-    pTitle->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pTitle->SetAttribute("width", "stretch");
 
-    m_pMemHeadline = AddLabel(pTitleRow, DUI_T(""), DUI_T("system_12"), m_pal.textHint);
-    m_pMemHeadline->SetAttribute(DUI_T("width"), DUI_T("360"));
-    m_pMemHeadline->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+    m_pMemHeadline = AddLabel(pTitleRow, "", "system_12", m_pal.textHint);
+    m_pMemHeadline->SetAttribute("width", "360");
+    m_pMemHeadline->SetAttribute("text_align", "right,vcenter");
 
-    ui::VBox* pGraphCard = AddCard(pPanel, DUI_T("stretch"));
-    pGraphCard->SetAttribute(DUI_T("margin"), DUI_T("0,4,0,6"));
+    ui::VBox* pGraphCard = AddCard(pPanel, "stretch");
+    pGraphCard->SetAttribute("margin", "0,4,0,6");
     m_pMemGraph = new activity::HistoryGraph(this);
-    m_pMemGraph->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-    m_pMemGraph->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    m_pMemGraph->SetAttribute("height", "stretch");
+    m_pMemGraph->SetAttribute("width", "stretch");
     m_pMemGraph->SetBkColor(m_pal.cardBg);
     m_pMemGraph->SetColours(m_pal.memUsed, WithAlpha(m_pal.memUsed, "55"),
                             WithAlpha(m_pal.memUsed, "00"), m_pal.grid);
@@ -682,8 +682,8 @@ void ActivityForm::BuildMemoryPanel(ui::VBox* pPanel)
 
     // The breakdown, two columns of two rows plus the swap figure.
     ui::HBox* pBreakdown = new ui::HBox(this);
-    pBreakdown->SetAttribute(DUI_T("height"), DUI_T("76"));
-    pBreakdown->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pBreakdown->SetAttribute("height", "76");
+    pBreakdown->SetAttribute("width", "stretch");
     pPanel->AddItem(pBreakdown);
 
     const char* labels[] = { "活跃", "联动", "非活跃", "缓存", "空闲", "交换" };
@@ -692,26 +692,26 @@ void ActivityForm::BuildMemoryPanel(ui::VBox* pPanel)
     for (int i = 0; i < 6; ++i) {
         if (i == 0 || i == 3) {
             ui::VBox* pColumn = new ui::VBox(this);
-            pColumn->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-            pColumn->SetAttribute(DUI_T("margin"), DUI_T("0,0,12,0"));
+            pColumn->SetAttribute("width", "stretch");
+            pColumn->SetAttribute("margin", "0,0,12,0");
             pBreakdown->AddItem(pColumn);
         }
         ui::VBox* pColumn = static_cast<ui::VBox*>(pBreakdown->GetItemAt(
             static_cast<size_t>(i / 3)));
         ui::HBox* pRow = new ui::HBox(this);
-        pRow->SetAttribute(DUI_T("height"), DUI_T("24"));
-        pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pRow->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
+        pRow->SetAttribute("height", "24");
+        pRow->SetAttribute("width", "stretch");
+        pRow->SetAttribute("child_align", "vcenter");
         pColumn->AddItem(pRow);
 
-        ui::Label* pName = AddLabel(pRow, DString(labels[i]), DUI_T("system_12"),
+        ui::Label* pName = AddLabel(pRow, U8String(labels[i]), "system_12",
                                     m_pal.textHint);
-        pName->SetAttribute(DUI_T("width"), DUI_T("90"));
+        pName->SetAttribute("width", "90");
 
-        ui::Label* pValue = AddLabel(pRow, DUI_T("—"), DUI_T("system_12"),
+        ui::Label* pValue = AddLabel(pRow, "—", "system_12",
                                      m_pal.textBody);
-        pValue->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pValue->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+        pValue->SetAttribute("width", "stretch");
+        pValue->SetAttribute("text_align", "right,vcenter");
         m_pMemValues.push_back(pValue);
     }
 }
@@ -719,99 +719,99 @@ void ActivityForm::BuildMemoryPanel(ui::VBox* pPanel)
 void ActivityForm::BuildDiskPanel(ui::VBox* pPanel)
 {
     ui::HBox* pTitleRow = new ui::HBox(this);
-    pTitleRow->SetAttribute(DUI_T("height"), DUI_T("26"));
-    pTitleRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pTitleRow->SetAttribute("height", "26");
+    pTitleRow->SetAttribute("width", "stretch");
     pPanel->AddItem(pTitleRow);
 
-    ui::Label* pTitle = AddLabel(pTitleRow, DUI_T("宗卷"), DUI_T("system_bold_16"),
+    ui::Label* pTitle = AddLabel(pTitleRow, "宗卷", "system_bold_16",
                                  m_pal.textStrong);
-    pTitle->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pTitle->SetAttribute("width", "stretch");
 
-    ui::Label* pHint = AddLabel(pTitleRow, DUI_T("已用 / 总容量"), DUI_T("system_12"),
+    ui::Label* pHint = AddLabel(pTitleRow, "已用 / 总容量", "system_12",
                                 m_pal.textHint);
-    pHint->SetAttribute(DUI_T("width"), DUI_T("auto"));
-    pHint->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+    pHint->SetAttribute("width", "auto");
+    pHint->SetAttribute("text_align", "right,vcenter");
 
     for (int i = 0; i < kMaxDiskRows; ++i) {
         ui::VBox* pBlock = new ui::VBox(this);
-        pBlock->SetAttribute(DUI_T("height"), DUI_T("56"));
-        pBlock->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pBlock->SetAttribute(DUI_T("margin"), DUI_T("0,6,0,0"));
+        pBlock->SetAttribute("height", "56");
+        pBlock->SetAttribute("width", "stretch");
+        pBlock->SetAttribute("margin", "0,6,0,0");
         pPanel->AddItem(pBlock);
 
         ui::HBox* pTop = new ui::HBox(this);
-        pTop->SetAttribute(DUI_T("height"), DUI_T("22"));
-        pTop->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pTop->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
+        pTop->SetAttribute("height", "22");
+        pTop->SetAttribute("width", "stretch");
+        pTop->SetAttribute("child_align", "vcenter");
         pBlock->AddItem(pTop);
 
         DiskRow row;
-        row.name = AddLabel(pTop, DUI_T("—"), DUI_T("system_14"), m_pal.textStrong);
-        row.name->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        row.name = AddLabel(pTop, "—", "system_14", m_pal.textStrong);
+        row.name->SetAttribute("width", "stretch");
 
-        row.detail = AddLabel(pTop, DUI_T(""), DUI_T("system_12"), m_pal.textHint);
-        row.detail->SetAttribute(DUI_T("width"), DUI_T("360"));
-        row.detail->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+        row.detail = AddLabel(pTop, "", "system_12", m_pal.textHint);
+        row.detail->SetAttribute("width", "360");
+        row.detail->SetAttribute("text_align", "right,vcenter");
 
         row.bar = new activity::MeterBar(this);
-        row.bar->SetAttribute(DUI_T("height"), DUI_T("10"));
-        row.bar->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        row.bar->SetAttribute(DUI_T("margin"), DUI_T("0,4,0,0"));
+        row.bar->SetAttribute("height", "10");
+        row.bar->SetAttribute("width", "stretch");
+        row.bar->SetAttribute("margin", "0,4,0,0");
         row.bar->SetColours(m_pal.track, m_pal.diskFill);
         pBlock->AddItem(row.bar);
 
         m_diskRows.push_back(row);
     }
 
-    m_pDiskEmpty = AddLabel(pPanel, DUI_T("没有可显示的文件系统"), DUI_T("system_12"),
+    m_pDiskEmpty = AddLabel(pPanel, "没有可显示的文件系统", "system_12",
                             m_pal.textHint);
-    m_pDiskEmpty->SetAttribute(DUI_T("height"), DUI_T("0"));
-    m_pDiskEmpty->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    m_pDiskEmpty->SetAttribute("height", "0");
+    m_pDiskEmpty->SetAttribute("width", "stretch");
 }
 
 void ActivityForm::BuildNetworkPanel(ui::VBox* pPanel)
 {
     ui::HBox* pTitleRow = new ui::HBox(this);
-    pTitleRow->SetAttribute(DUI_T("height"), DUI_T("26"));
-    pTitleRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pTitleRow->SetAttribute("height", "26");
+    pTitleRow->SetAttribute("width", "stretch");
     pPanel->AddItem(pTitleRow);
 
-    ui::Label* pTitle = AddLabel(pTitleRow, DUI_T("网络"), DUI_T("system_bold_16"),
+    ui::Label* pTitle = AddLabel(pTitleRow, "网络", "system_bold_16",
                                  m_pal.textStrong);
-    pTitle->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pTitle->SetAttribute("width", "stretch");
 
-    m_pNetHeadline = AddLabel(pTitleRow, DUI_T(""), DUI_T("system_12"), m_pal.textHint);
-    m_pNetHeadline->SetAttribute(DUI_T("width"), DUI_T("auto"));
-    m_pNetHeadline->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+    m_pNetHeadline = AddLabel(pTitleRow, "", "system_12", m_pal.textHint);
+    m_pNetHeadline->SetAttribute("width", "auto");
+    m_pNetHeadline->SetAttribute("text_align", "right,vcenter");
 
     // Two charts, as the macOS window has them: one for what came in and one
     // for what went out, rather than one chart with two series drawn over each
     // other.
     ui::HBox* pCharts = new ui::HBox(this);
-    pCharts->SetAttribute(DUI_T("height"), DUI_T("104"));
-    pCharts->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pCharts->SetAttribute("height", "104");
+    pCharts->SetAttribute("width", "stretch");
     pPanel->AddItem(pCharts);
 
-    struct ChartDef { const char* title; activity::HistoryGraph** target; DString colour; };
+    struct ChartDef { const char* title; activity::HistoryGraph** target; U8String colour; };
     const ChartDef charts[] = {
         { "下行", &m_pNetDown, m_pal.netDown },
         { "上行", &m_pNetUp,   m_pal.netUp   },
     };
     for (int i = 0; i < 2; ++i) {
         ui::VBox* pColumn = new ui::VBox(this);
-        pColumn->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pColumn->SetAttribute(DUI_T("margin"), DString(i == 0 ? "0,0,8,0" : "8,0,0,0"));
+        pColumn->SetAttribute("width", "stretch");
+        pColumn->SetAttribute("margin", U8String(i == 0 ? "0,0,8,0" : "8,0,0,0"));
         pCharts->AddItem(pColumn);
 
-        ui::Label* pLabel = AddLabel(pColumn, DString(charts[i].title), DUI_T("system_12"),
+        ui::Label* pLabel = AddLabel(pColumn, U8String(charts[i].title), "system_12",
                                      m_pal.textHint);
-        pLabel->SetAttribute(DUI_T("height"), DUI_T("20"));
-        pLabel->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        pLabel->SetAttribute("height", "20");
+        pLabel->SetAttribute("width", "stretch");
 
         activity::HistoryGraph* pGraph = new activity::HistoryGraph(this);
-        pGraph->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-        pGraph->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pGraph->SetAttribute(DUI_T("margin"), DUI_T("0,4,0,0"));
+        pGraph->SetAttribute("height", "stretch");
+        pGraph->SetAttribute("width", "stretch");
+        pGraph->SetAttribute("margin", "0,4,0,0");
         pGraph->SetBkColor(m_pal.cardBg);
         pGraph->SetColours(charts[i].colour, WithAlpha(charts[i].colour, "55"),
                            WithAlpha(charts[i].colour, "00"), m_pal.grid);
@@ -821,36 +821,36 @@ void ActivityForm::BuildNetworkPanel(ui::VBox* pPanel)
 
     for (int i = 0; i < kMaxNetRows; ++i) {
         ui::VBox* pBlock = new ui::VBox(this);
-        pBlock->SetAttribute(DUI_T("height"), DUI_T("38"));
-        pBlock->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pBlock->SetAttribute(DUI_T("margin"), DUI_T("0,6,0,0"));
+        pBlock->SetAttribute("height", "38");
+        pBlock->SetAttribute("width", "stretch");
+        pBlock->SetAttribute("margin", "0,6,0,0");
         pPanel->AddItem(pBlock);
 
         ui::HBox* pTop = new ui::HBox(this);
-        pTop->SetAttribute(DUI_T("height"), DUI_T("20"));
-        pTop->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pTop->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
+        pTop->SetAttribute("height", "20");
+        pTop->SetAttribute("width", "stretch");
+        pTop->SetAttribute("child_align", "vcenter");
         pBlock->AddItem(pTop);
 
         NetRow row;
-        row.name = AddLabel(pTop, DUI_T("—"), DUI_T("system_14"), m_pal.textStrong);
-        row.name->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        row.name = AddLabel(pTop, "—", "system_14", m_pal.textStrong);
+        row.name->SetAttribute("width", "stretch");
 
-        row.rate = AddLabel(pTop, DUI_T(""), DUI_T("system_12"), m_pal.textBody);
-        row.rate->SetAttribute(DUI_T("width"), DUI_T("420"));
-        row.rate->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
+        row.rate = AddLabel(pTop, "", "system_12", m_pal.textBody);
+        row.rate->SetAttribute("width", "420");
+        row.rate->SetAttribute("text_align", "right,vcenter");
 
-        row.detail = AddLabel(pBlock, DUI_T(""), DUI_T("system_12"), m_pal.textHint);
-        row.detail->SetAttribute(DUI_T("height"), DUI_T("18"));
-        row.detail->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+        row.detail = AddLabel(pBlock, "", "system_12", m_pal.textHint);
+        row.detail->SetAttribute("height", "18");
+        row.detail->SetAttribute("width", "stretch");
 
         m_netRows.push_back(row);
     }
 
-    m_pNetEmpty = AddLabel(pPanel, DUI_T("没有活动的网络接口"), DUI_T("system_12"),
+    m_pNetEmpty = AddLabel(pPanel, "没有活动的网络接口", "system_12",
                            m_pal.textHint);
-    m_pNetEmpty->SetAttribute(DUI_T("height"), DUI_T("0"));
-    m_pNetEmpty->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    m_pNetEmpty->SetAttribute("height", "0");
+    m_pNetEmpty->SetAttribute("width", "stretch");
 }
 
 // ---------------------------------------------------------------------------
@@ -905,27 +905,27 @@ void ActivityForm::RefreshCpuPanel()
 
     if (m_pCpuLoad != nullptr) {
         m_pCpuLoad->SetText(
-            DUI_T("负载 ") + FormatDouble(m_cpu.load[0], "%.2f") + DUI_T(" ") +
-            FormatDouble(m_cpu.load[1], "%.2f") + DUI_T(" ") +
-            FormatDouble(m_cpu.load[2], "%.2f") + DUI_T("   ·   运行 ") +
+            "负载 " + FormatDouble(m_cpu.load[0], "%.2f") + " " +
+            FormatDouble(m_cpu.load[1], "%.2f") + " " +
+            FormatDouble(m_cpu.load[2], "%.2f") + "   ·   运行 " +
             FormatUptime(m_cpu.uptime));
     }
 
     if (m_pCpuLegend.size() >= 4) {
-        m_pCpuLegend[0]->SetText(DUI_T("用户 ") + FormatDouble(m_cpu.user, "%.1f") + DUI_T("%"));
-        m_pCpuLegend[1]->SetText(DUI_T("系统 ") + FormatDouble(m_cpu.sys, "%.1f") + DUI_T("%"));
-        m_pCpuLegend[2]->SetText(DUI_T("空闲 ") + FormatDouble(m_cpu.idle, "%.1f") + DUI_T("%"));
+        m_pCpuLegend[0]->SetText("用户 " + FormatDouble(m_cpu.user, "%.1f") + "%");
+        m_pCpuLegend[1]->SetText("系统 " + FormatDouble(m_cpu.sys, "%.1f") + "%");
+        m_pCpuLegend[2]->SetText("空闲 " + FormatDouble(m_cpu.idle, "%.1f") + "%");
         m_pCpuLegend[3]->SetText(
             m_cpu.temperature > 0.0
-                ? DUI_T("温度 ") + FormatDouble(m_cpu.temperature, "%.1f") + DUI_T(" °C")
-                : DUI_T("温度 不可读"));
+                ? "温度 " + FormatDouble(m_cpu.temperature, "%.1f") + " °C"
+                : "温度 不可读");
     }
 
     for (size_t i = 0; i < m_pCoreBars.size(); ++i) {
         const double busy = i < m_cpu.coreBusy.size() ? m_cpu.coreBusy[i] : 0.0;
         m_pCoreBars[i]->SetFraction(static_cast<float>(busy / 100.0));
         if (i < m_pCoreReadings.size()) {
-            m_pCoreReadings[i]->SetText(FormatDouble(busy, "%.0f") + DUI_T("%"));
+            m_pCoreReadings[i]->SetText(FormatDouble(busy, "%.0f") + "%");
         }
     }
 }
@@ -939,9 +939,9 @@ void ActivityForm::RefreshMemoryPanel()
 
     if (m_pMemHeadline != nullptr) {
         m_pMemHeadline->SetText(
-            DUI_T("已用 ") + FormatBytes(m_mem.used) + DUI_T(" / ") +
-            FormatBytes(m_mem.total) + DUI_T("  (") +
-            FormatDouble(m_mem.usedPercent, "%.0f") + DUI_T("%)"));
+            "已用 " + FormatBytes(m_mem.used) + " / " +
+            FormatBytes(m_mem.total) + "  (" +
+            FormatDouble(m_mem.usedPercent, "%.0f") + "%)");
     }
 
     const unsigned long long values[] = { m_mem.active, m_mem.wired, m_mem.inactive,
@@ -957,23 +957,23 @@ void ActivityForm::RefreshDiskPanel()
     for (size_t i = 0; i < m_diskRows.size(); ++i) {
         DiskRow& row = m_diskRows[i];
         if (i >= shown) {
-            row.name->SetText(DUI_T(""));
-            row.detail->SetText(DUI_T(""));
+            row.name->SetText("");
+            row.detail->SetText("");
             row.bar->SetFraction(0.0f);
             continue;
         }
         const activity::DiskInfo& disk = m_disks[i];
-        row.name->SetText(DString(disk.mount.c_str()));
+        row.name->SetText(U8String(disk.mount.c_str()));
         row.detail->SetText(
-            FormatBytes(disk.used) + DUI_T(" / ") + FormatBytes(disk.total) +
-            DUI_T("   ·   可用 ") + FormatBytes(disk.avail));
+            FormatBytes(disk.used) + " / " + FormatBytes(disk.total) +
+            "   ·   可用 " + FormatBytes(disk.avail));
         row.bar->SetColours(m_pal.track,
                             disk.usedPercent >= 90.0 ? m_pal.diskFull : m_pal.diskFill);
         row.bar->SetFraction(static_cast<float>(disk.usedPercent / 100.0));
     }
     if (m_pDiskEmpty != nullptr) {
-        m_pDiskEmpty->SetAttribute(DUI_T("height"),
-                                   m_disks.empty() ? DUI_T("22") : DUI_T("0"));
+        m_pDiskEmpty->SetAttribute("height",
+                                   m_disks.empty() ? "22" : "0");
     }
 }
 
@@ -998,7 +998,7 @@ void ActivityForm::RefreshNetworkPanel()
         up += info.txRate;
     }
     if (m_pNetHeadline != nullptr) {
-        m_pNetHeadline->SetText(DUI_T("↓ ") + FormatRate(down) + DUI_T("   ↑ ") +
+        m_pNetHeadline->SetText("↓ " + FormatRate(down) + "   ↑ " +
                                 FormatRate(up));
     }
 
@@ -1006,26 +1006,26 @@ void ActivityForm::RefreshNetworkPanel()
     for (size_t i = 0; i < m_netRows.size(); ++i) {
         NetRow& row = m_netRows[i];
         if (i >= shown) {
-            row.name->SetText(DUI_T(""));
-            row.rate->SetText(DUI_T(""));
-            row.detail->SetText(DUI_T(""));
+            row.name->SetText("");
+            row.rate->SetText("");
+            row.detail->SetText("");
             continue;
         }
         const activity::NetInfo& info = m_network[i];
-        row.name->SetText(DString(info.name.c_str()) +
-                          (info.up ? DUI_T("  已连接") : DUI_T("  未连接")));
-        row.rate->SetText(DUI_T("↓ ") + FormatRate(info.rxRate) + DUI_T("   ↑ ") +
+        row.name->SetText(U8String(info.name.c_str()) +
+                          (info.up ? "  已连接" : "  未连接"));
+        row.rate->SetText("↓ " + FormatRate(info.rxRate) + "   ↑ " +
                           FormatRate(info.txRate));
-        DString detail = DUI_T("累计 收 ") + FormatBytes(info.rxBytes) + DUI_T(" · 发 ") +
+        U8String detail = "累计 收 " + FormatBytes(info.rxBytes) + " · 发 " +
                          FormatBytes(info.txBytes);
         for (const std::string& address : info.addresses) {
-            detail += DUI_T("   ·   ") + DString(address.c_str());
+            detail += "   ·   " + U8String(address.c_str());
         }
         row.detail->SetText(detail);
     }
     if (m_pNetEmpty != nullptr) {
-        m_pNetEmpty->SetAttribute(DUI_T("height"),
-                                  m_network.empty() ? DUI_T("22") : DUI_T("0"));
+        m_pNetEmpty->SetAttribute("height",
+                                  m_network.empty() ? "22" : "0");
     }
 }
 
@@ -1038,12 +1038,12 @@ void ActivityForm::RefreshProcessTable()
             continue;
         }
         for (int c = 0; c < kColCount; ++c) {
-            m_processRows[i].cells[c]->SetText(DUI_T(""));
+            m_processRows[i].cells[c]->SetText("");
         }
     }
     if (m_pProcessEmpty != nullptr) {
-        m_pProcessEmpty->SetAttribute(DUI_T("height"),
-                                      m_processes.empty() ? DUI_T("22") : DUI_T("0"));
+        m_pProcessEmpty->SetAttribute("height",
+                                      m_processes.empty() ? "22" : "0");
     }
 }
 
@@ -1053,13 +1053,13 @@ void ActivityForm::FillProcessRow(size_t row, const activity::ProcessInfo& info)
         return;
     }
     ProcessRow& cells = m_processRows[row];
-    cells.cells[kColName]->SetText(DString(info.name.c_str()));
+    cells.cells[kColName]->SetText(U8String(info.name.c_str()));
     cells.cells[kColPid]->SetText(Num(info.pid));
     cells.cells[kColCpu]->SetText(FormatDouble(info.cpu, "%.1f"));
     cells.cells[kColTime]->SetText(FormatDuration(info.cpuSeconds));
     cells.cells[kColMemory]->SetText(FormatBytes(info.rss));
     cells.cells[kColThreads]->SetText(Num(info.threads));
-    cells.cells[kColState]->SetText(DString(activity::Sampler::StateText(info.state).c_str()));
+    cells.cells[kColState]->SetText(U8String(activity::Sampler::StateText(info.state).c_str()));
 
     // A process eating a core or more is worth noticing without reading the
     // number.
@@ -1075,7 +1075,7 @@ void ActivityForm::RefreshStatusBar()
     }
     if (m_pStatusLeft != nullptr) {
         m_pStatusLeft->SetText(Num(static_cast<long long>(m_processes.size())) +
-                               DUI_T(" 个进程   ·   ") + Num(threads) + DUI_T(" 个线程"));
+                               " 个进程   ·   " + Num(threads) + " 个线程");
     }
 }
 
@@ -1132,9 +1132,9 @@ void ActivityForm::UpdateColumnTitles()
         if (m_pColumnButtons[c] == nullptr) {
             continue;
         }
-        DString title = DString(kColumnDefs[c].title);
+        U8String title = U8String(kColumnDefs[c].title);
         if (c == m_sortColumn) {
-            title += m_sortAscending ? DUI_T(" ▲") : DUI_T(" ▼");
+            title += m_sortAscending ? " ▲" : " ▼";
         }
         m_pColumnButtons[c]->SetText(title);
         m_pColumnButtons[c]->SetStateTextColor(
@@ -1145,7 +1145,7 @@ void ActivityForm::UpdateColumnTitles()
 // ---------------------------------------------------------------------------
 // Formatting
 // ---------------------------------------------------------------------------
-DString ActivityForm::FormatBytes(unsigned long long bytes)
+U8String ActivityForm::FormatBytes(unsigned long long bytes)
 {
     const double value = static_cast<double>(bytes);
     if (bytes >= 1024ULL * 1024 * 1024) {
@@ -1157,10 +1157,10 @@ DString ActivityForm::FormatBytes(unsigned long long bytes)
     if (bytes >= 1024) {
         return FormatDouble(value / 1024.0, "%.0f KB");
     }
-    return Num(static_cast<long long>(bytes)) + DUI_T(" B");
+    return Num(static_cast<long long>(bytes)) + " B";
 }
 
-DString ActivityForm::FormatRate(double bytesPerSecond)
+U8String ActivityForm::FormatRate(double bytesPerSecond)
 {
     if (bytesPerSecond >= 1024.0 * 1024.0) {
         return FormatDouble(bytesPerSecond / (1024.0 * 1024.0), "%.1f MB/s");
@@ -1171,7 +1171,7 @@ DString ActivityForm::FormatRate(double bytesPerSecond)
     return FormatDouble(bytesPerSecond, "%.0f B/s");
 }
 
-DString ActivityForm::FormatDuration(double seconds)
+U8String ActivityForm::FormatDuration(double seconds)
 {
     const long long total = static_cast<long long>(seconds);
     const long long hours = total / 3600;
@@ -1183,10 +1183,10 @@ DString ActivityForm::FormatDuration(double seconds)
     } else {
         std::snprintf(buffer, sizeof(buffer), "%lld:%02lld", minutes, secs);
     }
-    return DString(buffer);
+    return U8String(buffer);
 }
 
-DString ActivityForm::FormatUptime(long seconds)
+U8String ActivityForm::FormatUptime(long seconds)
 {
     const long days = seconds / 86400;
     const long hours = (seconds % 86400) / 3600;
@@ -1197,5 +1197,5 @@ DString ActivityForm::FormatUptime(long seconds)
     } else {
         std::snprintf(buffer, sizeof(buffer), "%ld:%02ld", hours, minutes);
     }
-    return DString(buffer);
+    return U8String(buffer);
 }

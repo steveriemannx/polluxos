@@ -9,7 +9,7 @@
 class App : public ui::FrameworkThread
 {
 public:
-    App() : FrameworkThread(DUI_T("App"), ui::kThreadUI) {}
+    App() : FrameworkThread("App", ui::kThreadUI) {}
 
     void Run() { RunMessageLoop(); }
 
@@ -20,10 +20,10 @@ private:
         // the executable and accessed directly from memory; no resource directory
         // is needed at runtime.
         ui::GlobalManager::Instance().Startup(
-            ui::MemoryResParam(GetEmbeddedResourcesData(), GetEmbeddedResourcesSize()));
+            ui::MemoryResParam(EmbeddedResources()));
 
         PolluxOSForm* window = new PolluxOSForm();
-        window->CreateWnd(nullptr, ui::WindowCreateParam(DUI_T("PolluxOS Desktop"), true));
+        window->CreateWnd(nullptr, ui::WindowCreateParam("PolluxOS Desktop", true));
         window->PostQuitMsgWhenClosed(true);
         window->ShowWindow(ui::kSW_SHOW_NORMAL);
     }

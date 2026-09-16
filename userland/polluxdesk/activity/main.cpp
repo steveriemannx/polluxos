@@ -10,7 +10,7 @@
 class App : public ui::FrameworkThread
 {
 public:
-    App() : FrameworkThread(DUI_T("App"), ui::kThreadUI) {}
+    App() : FrameworkThread("App", ui::kThreadUI) {}
 
     void Run() { RunMessageLoop(); }
 
@@ -20,10 +20,10 @@ private:
         // All resources (global.xml, images, fonts, language files) are
         // embedded in the executable; no resource directory is needed.
         ui::GlobalManager::Instance().Startup(
-            ui::MemoryResParam(GetEmbeddedResourcesData(), GetEmbeddedResourcesSize()));
+            ui::MemoryResParam(EmbeddedResources()));
 
         ActivityForm* window = new ActivityForm();
-        window->CreateWnd(nullptr, ui::WindowCreateParam(DUI_T("活动监视器"), true));
+        window->CreateWnd(nullptr, ui::WindowCreateParam("活动监视器", true));
         // Clicking the compositor's red traffic light sends an xdg close:
         // without this the window is destroyed but the process lingers
         // invisibly (the "traffic lights do not work" symptom).

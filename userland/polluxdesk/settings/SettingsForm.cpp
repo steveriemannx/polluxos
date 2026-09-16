@@ -10,41 +10,41 @@
 
 namespace {
 
-const DString kBg = DUI_T("#F2FFFFFF");
-const DString kCard = DUI_T("#F8FFFFFF");
-const DString kBorder = DUI_T("#559A9AA0");
-const DString kText = DUI_T("#FF1D1D1F");
-const DString kHint = DUI_T("#FF6E6E73");
-const DString kAccent = DUI_T("#FF0A84FF");
+const U8String kBg = "#F2FFFFFF";
+const U8String kCard = "#F8FFFFFF";
+const U8String kBorder = "#559A9AA0";
+const U8String kText = "#FF1D1D1F";
+const U8String kHint = "#FF6E6E73";
+const U8String kAccent = "#FF0A84FF";
 
 void StyleButton(ui::Button* button)
 {
-    button->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-    button->SetAttribute(DUI_T("text_color"), kText);
-    button->SetAttribute(DUI_T("height"), DUI_T("38"));
-    button->SetAttribute(DUI_T("width"), DUI_T("190"));
-    button->SetAttribute(DUI_T("margin"), DUI_T("4,4,4,4"));
-    button->SetStateColor(ui::kControlStateNormal, DUI_T("#FFFFFFFF"));
-    button->SetStateColor(ui::kControlStateHot, DUI_T("#220A84FF"));
+    button->SetAttribute("font", "system_14");
+    button->SetAttribute("text_color", kText);
+    button->SetAttribute("height", "38");
+    button->SetAttribute("width", "190");
+    button->SetAttribute("margin", "4,4,4,4");
+    button->SetStateColor(ui::kControlStateNormal, "#FFFFFFFF");
+    button->SetStateColor(ui::kControlStateHot, "#220A84FF");
     button->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(9, 9), false);
     button->SetStateColorRound(ui::kControlStateHot, ui::UiSize(9, 9), false);
-    button->SetAttribute(DUI_T("border_round"), DUI_T("9,9"));
-    button->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+    button->SetAttribute("border_round", "9,9");
+    button->SetAttribute("cursor_type", "hand");
 }
 
 void StyleSectionButton(ui::Button* button)
 {
-    button->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-    button->SetAttribute(DUI_T("text_color"), kText);
-    button->SetAttribute(DUI_T("height"), DUI_T("42"));
-    button->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    button->SetAttribute(DUI_T("margin"), DUI_T("8,2,8,2"));
-    button->SetAttribute(DUI_T("text_padding"), DUI_T("14,0,0,0"));
-    button->SetStateColor(ui::kControlStateNormal, DUI_T("#00000000"));
-    button->SetStateColor(ui::kControlStateHot, DUI_T("#220A84FF"));
+    button->SetAttribute("font", "system_14");
+    button->SetAttribute("text_color", kText);
+    button->SetAttribute("height", "42");
+    button->SetAttribute("width", "stretch");
+    button->SetAttribute("margin", "8,2,8,2");
+    button->SetAttribute("text_padding", "14,0,0,0");
+    button->SetStateColor(ui::kControlStateNormal, "#00000000");
+    button->SetStateColor(ui::kControlStateHot, "#220A84FF");
     button->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(8, 8), false);
     button->SetStateColorRound(ui::kControlStateHot, ui::UiSize(8, 8), false);
-    button->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+    button->SetAttribute("cursor_type", "hand");
 }
 
 } // namespace
@@ -52,8 +52,8 @@ void StyleSectionButton(ui::Button* button)
 SettingsForm::SettingsForm() = default;
 SettingsForm::~SettingsForm() = default;
 
-DString SettingsForm::GetSkinFolder() { return DUI_T(""); }
-DString SettingsForm::GetSkinFile() { return DUI_T(""); }
+U8String SettingsForm::GetSkinFolder() { return ""; }
+U8String SettingsForm::GetSkinFile() { return ""; }
 
 void SettingsForm::GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs)
 {
@@ -82,26 +82,26 @@ void SettingsForm::BuildUi()
 {
     ui::VBox* root = new ui::VBox(this);
     root->SetBkColor(kBg);
-    root->SetAttribute(DUI_T("padding"), DUI_T("22,22,22,22"));
+    root->SetAttribute("padding", "22,22,22,22");
 
     ui::Label* title = new ui::Label(this);
-    title->SetText(DUI_T("系统设置"));
-    title->SetAttribute(DUI_T("font"), DUI_T("system_bold_24"));
-    title->SetAttribute(DUI_T("text_color"), kText);
-    title->SetAttribute(DUI_T("height"), DUI_T("42"));
+    title->SetText("系统设置");
+    title->SetAttribute("font", "system_bold_24");
+    title->SetAttribute("text_color", kText);
+    title->SetAttribute("height", "42");
     root->AddItem(title);
 
     ui::HBox* content = new ui::HBox(this);
-    content->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+    content->SetAttribute("height", "stretch");
     root->AddItem(content);
 
     // Left sidebar, macOS System Settings style.
     ui::VBox* sidebar = new ui::VBox(this);
-    sidebar->SetAttribute(DUI_T("width"), DUI_T("210"));
+    sidebar->SetAttribute("width", "210");
     sidebar->SetBkColor(kCard);
     sidebar->SetBorderColor(kBorder);
-    sidebar->SetAttribute(DUI_T("border_size"), DUI_T("1"));
-    sidebar->SetAttribute(DUI_T("border_round"), DUI_T("12,12"));
+    sidebar->SetAttribute("border_size", "1");
+    sidebar->SetAttribute("border_round", "12,12");
     sidebar->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(12, 12), false);
     content->AddItem(sidebar);
 
@@ -110,7 +110,7 @@ void SettingsForm::BuildUi()
     };
     for (const auto& section : sections) {
         ui::Button* sectionButton = new ui::Button(this);
-        sectionButton->SetText(DString(section.label));
+        sectionButton->SetText(U8String(section.label));
         StyleSectionButton(sectionButton);
         sectionButton->AttachClick([this, section](const ui::EventArgs&) {
             ShowSection(section.index);
@@ -121,8 +121,8 @@ void SettingsForm::BuildUi()
 
     // Right content panel.
     m_pPanel = new ui::VBox(this);
-    m_pPanel->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    m_pPanel->SetAttribute(DUI_T("padding"), DUI_T("18,0,0,18"));
+    m_pPanel->SetAttribute("width", "stretch");
+    m_pPanel->SetAttribute("padding", "18,0,0,18");
     content->AddItem(m_pPanel);
 
     AttachBox(root);
@@ -158,10 +158,10 @@ void SettingsForm::ShowSection(int index)
 void SettingsForm::BuildWallpaperPanel(ui::VBox* panel)
 {
     ui::Label* wallpaper = new ui::Label(this);
-    wallpaper->SetText(DUI_T("壁纸"));
-    wallpaper->SetAttribute(DUI_T("font"), DUI_T("system_bold_18"));
-    wallpaper->SetAttribute(DUI_T("text_color"), kText);
-    wallpaper->SetAttribute(DUI_T("height"), DUI_T("34"));
+    wallpaper->SetText("壁纸");
+    wallpaper->SetAttribute("font", "system_bold_18");
+    wallpaper->SetAttribute("text_color", kText);
+    wallpaper->SetAttribute("height", "34");
     panel->AddItem(wallpaper);
 
     struct Wallpaper { const char* label; const char* value; } wallpapers[] = {
@@ -170,7 +170,7 @@ void SettingsForm::BuildWallpaperPanel(ui::VBox* panel)
     };
     for (const Wallpaper& item : wallpapers) {
         ui::Button* button = new ui::Button(this);
-        button->SetText(DString(item.label));
+        button->SetText(U8String(item.label));
         StyleButton(button);
         button->AttachClick([this, item](const ui::EventArgs&) {
             ApplyWallpaper(item.value);
@@ -180,17 +180,17 @@ void SettingsForm::BuildWallpaperPanel(ui::VBox* panel)
     }
 
     ui::Label* resolution = new ui::Label(this);
-    resolution->SetText(DUI_T("分辨率"));
-    resolution->SetAttribute(DUI_T("font"), DUI_T("system_bold_18"));
-    resolution->SetAttribute(DUI_T("text_color"), kText);
-    resolution->SetAttribute(DUI_T("height"), DUI_T("34"));
-    resolution->SetAttribute(DUI_T("margin"), DUI_T("16,0,0,0"));
+    resolution->SetText("分辨率");
+    resolution->SetAttribute("font", "system_bold_18");
+    resolution->SetAttribute("text_color", kText);
+    resolution->SetAttribute("height", "34");
+    resolution->SetAttribute("margin", "16,0,0,0");
     panel->AddItem(resolution);
 
     const char* resolutions[] = { "1920x1080", "1600x900", "1280x720" };
     for (const char* value : resolutions) {
         ui::Button* button = new ui::Button(this);
-        button->SetText(DString(value));
+        button->SetText(U8String(value));
         StyleButton(button);
         button->AttachClick([this, value](const ui::EventArgs&) {
             ApplyResolution(value);
@@ -200,70 +200,70 @@ void SettingsForm::BuildWallpaperPanel(ui::VBox* panel)
     }
 
     m_pStatus = new ui::Label(this);
-    m_pStatus->SetText(DUI_T("修改会实时应用到桌面"));
-    m_pStatus->SetAttribute(DUI_T("font"), DUI_T("system_12"));
-    m_pStatus->SetAttribute(DUI_T("text_color"), kHint);
-    m_pStatus->SetAttribute(DUI_T("height"), DUI_T("30"));
+    m_pStatus->SetText("修改会实时应用到桌面");
+    m_pStatus->SetAttribute("font", "system_12");
+    m_pStatus->SetAttribute("text_color", kHint);
+    m_pStatus->SetAttribute("height", "30");
     panel->AddItem(m_pStatus);
 }
 
 void SettingsForm::BuildNetworkPanel(ui::VBox* panel)
 {
     ui::Label* title = new ui::Label(this);
-    title->SetText(DUI_T("网络"));
-    title->SetAttribute(DUI_T("font"), DUI_T("system_bold_18"));
-    title->SetAttribute(DUI_T("text_color"), kText);
-    title->SetAttribute(DUI_T("height"), DUI_T("34"));
+    title->SetText("网络");
+    title->SetAttribute("font", "system_bold_18");
+    title->SetAttribute("text_color", kText);
+    title->SetAttribute("height", "34");
     panel->AddItem(title);
 
     ui::Label* ethernet = new ui::Label(this);
-    ethernet->SetText(DUI_T("以太网  已连接"));
-    ethernet->SetAttribute(DUI_T("font"), DUI_T("system_16"));
-    ethernet->SetAttribute(DUI_T("text_color"), kText);
-    ethernet->SetAttribute(DUI_T("height"), DUI_T("32"));
+    ethernet->SetText("以太网  已连接");
+    ethernet->SetAttribute("font", "system_16");
+    ethernet->SetAttribute("text_color", kText);
+    ethernet->SetAttribute("height", "32");
     panel->AddItem(ethernet);
 
     ui::Label* ip = new ui::Label(this);
-    ip->SetText(DUI_T("IP 地址 192.168.0.104"));
-    ip->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-    ip->SetAttribute(DUI_T("text_color"), kHint);
-    ip->SetAttribute(DUI_T("height"), DUI_T("28"));
+    ip->SetText("IP 地址 192.168.0.104");
+    ip->SetAttribute("font", "system_14");
+    ip->SetAttribute("text_color", kHint);
+    ip->SetAttribute("height", "28");
     panel->AddItem(ip);
 
     ui::Label* mask = new ui::Label(this);
-    mask->SetText(DUI_T("子网掩码 255.255.255.0"));
-    mask->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-    mask->SetAttribute(DUI_T("text_color"), kHint);
-    mask->SetAttribute(DUI_T("height"), DUI_T("28"));
+    mask->SetText("子网掩码 255.255.255.0");
+    mask->SetAttribute("font", "system_14");
+    mask->SetAttribute("text_color", kHint);
+    mask->SetAttribute("height", "28");
     panel->AddItem(mask);
 
     ui::Button* refresh = new ui::Button(this);
-    refresh->SetText(DUI_T("刷新网络状态"));
+    refresh->SetText("刷新网络状态");
     StyleButton(refresh);
     refresh->AttachClick([this](const ui::EventArgs&) {
         NotifyCompositor();
         if (m_pStatus != nullptr) {
-            m_pStatus->SetText(DUI_T("已通知 compositor 刷新状态"));
+            m_pStatus->SetText("已通知 compositor 刷新状态");
         }
         return true;
     });
     panel->AddItem(refresh);
 
     m_pStatus = new ui::Label(this);
-    m_pStatus->SetText(DUI_T("网络状态由系统自动管理"));
-    m_pStatus->SetAttribute(DUI_T("font"), DUI_T("system_12"));
-    m_pStatus->SetAttribute(DUI_T("text_color"), kHint);
-    m_pStatus->SetAttribute(DUI_T("height"), DUI_T("30"));
+    m_pStatus->SetText("网络状态由系统自动管理");
+    m_pStatus->SetAttribute("font", "system_12");
+    m_pStatus->SetAttribute("text_color", kHint);
+    m_pStatus->SetAttribute("height", "30");
     panel->AddItem(m_pStatus);
 }
 
 void SettingsForm::BuildWifiPanel(ui::VBox* panel)
 {
     ui::Label* title = new ui::Label(this);
-    title->SetText(DUI_T("Wi-Fi"));
-    title->SetAttribute(DUI_T("font"), DUI_T("system_bold_18"));
-    title->SetAttribute(DUI_T("text_color"), kText);
-    title->SetAttribute(DUI_T("height"), DUI_T("34"));
+    title->SetText("Wi-Fi");
+    title->SetAttribute("font", "system_bold_18");
+    title->SetAttribute("text_color", kText);
+    title->SetAttribute("height", "34");
     panel->AddItem(title);
 
     // The real state of the interface, not a switch that pretends.
@@ -294,28 +294,28 @@ void SettingsForm::BuildWifiPanel(ui::VBox* panel)
     }
 
     ui::Label* status = new ui::Label(this);
-    status->SetText(ssid.empty() ? DUI_T("未连接") : DString(ssid.c_str()));
-    status->SetAttribute(DUI_T("font"), DUI_T("system_bold_16"));
-    status->SetAttribute(DUI_T("text_color"), kText);
-    status->SetAttribute(DUI_T("height"), DUI_T("30"));
+    status->SetText(ssid.empty() ? "未连接" : U8String(ssid.c_str()));
+    status->SetAttribute("font", "system_bold_16");
+    status->SetAttribute("text_color", kText);
+    status->SetAttribute("height", "30");
     panel->AddItem(status);
 
     ui::Label* detail = new ui::Label(this);
-    detail->SetText(address.empty() ? DUI_T("没有分配地址") : DString(address.c_str()));
-    detail->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-    detail->SetAttribute(DUI_T("text_color"), kHint);
-    detail->SetAttribute(DUI_T("height"), DUI_T("28"));
+    detail->SetText(address.empty() ? "没有分配地址" : U8String(address.c_str()));
+    detail->SetAttribute("font", "system_14");
+    detail->SetAttribute("text_color", kHint);
+    detail->SetAttribute("height", "28");
     panel->AddItem(detail);
 
     ui::Label* note = new ui::Label(this);
-    note->SetText(DUI_T("扫描、选择网络和输入密码在「Wi-Fi」窗口里。"));
-    note->SetAttribute(DUI_T("font"), DUI_T("system_12"));
-    note->SetAttribute(DUI_T("text_color"), kHint);
-    note->SetAttribute(DUI_T("height"), DUI_T("30"));
+    note->SetText("扫描、选择网络和输入密码在「Wi-Fi」窗口里。");
+    note->SetAttribute("font", "system_12");
+    note->SetAttribute("text_color", kHint);
+    note->SetAttribute("height", "30");
     panel->AddItem(note);
 
     ui::Button* open = new ui::Button(this);
-    open->SetText(DUI_T("打开 Wi-Fi 设置…"));
+    open->SetText("打开 Wi-Fi 设置…");
     StyleButton(open);
     open->AttachClick([this](const ui::EventArgs&) {
         std::system("\"" POLLUX_BIN "/polluxdesk_wifi\" >/dev/null 2>&1 &");
@@ -324,34 +324,34 @@ void SettingsForm::BuildWifiPanel(ui::VBox* panel)
     panel->AddItem(open);
 
     m_pStatus = new ui::Label(this);
-    m_pStatus->SetText(DUI_T(""));
-    m_pStatus->SetAttribute(DUI_T("font"), DUI_T("system_12"));
-    m_pStatus->SetAttribute(DUI_T("text_color"), kHint);
-    m_pStatus->SetAttribute(DUI_T("height"), DUI_T("30"));
+    m_pStatus->SetText("");
+    m_pStatus->SetAttribute("font", "system_12");
+    m_pStatus->SetAttribute("text_color", kHint);
+    m_pStatus->SetAttribute("height", "30");
     panel->AddItem(m_pStatus);
 }
 
 void SettingsForm::BuildAboutPanel(ui::VBox* panel)
 {
     ui::Label* title = new ui::Label(this);
-    title->SetText(DUI_T("关于 PolluxOS"));
-    title->SetAttribute(DUI_T("font"), DUI_T("system_bold_18"));
-    title->SetAttribute(DUI_T("text_color"), kText);
-    title->SetAttribute(DUI_T("height"), DUI_T("34"));
+    title->SetText("关于 PolluxOS");
+    title->SetAttribute("font", "system_bold_18");
+    title->SetAttribute("text_color", kText);
+    title->SetAttribute("height", "34");
     panel->AddItem(title);
 
     ui::Label* version = new ui::Label(this);
-    version->SetText(DUI_T("版本  0.1.0"));
-    version->SetAttribute(DUI_T("font"), DUI_T("system_16"));
-    version->SetAttribute(DUI_T("text_color"), kText);
-    version->SetAttribute(DUI_T("height"), DUI_T("32"));
+    version->SetText("版本  0.1.0");
+    version->SetAttribute("font", "system_16");
+    version->SetAttribute("text_color", kText);
+    version->SetAttribute("height", "32");
     panel->AddItem(version);
 
     ui::Label* desc = new ui::Label(this);
-    desc->SetText(DUI_T("PolluxOS 系统设置（简单演示版）"));
-    desc->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-    desc->SetAttribute(DUI_T("text_color"), kHint);
-    desc->SetAttribute(DUI_T("height"), DUI_T("28"));
+    desc->SetText("PolluxOS 系统设置（简单演示版）");
+    desc->SetAttribute("font", "system_14");
+    desc->SetAttribute("text_color", kHint);
+    desc->SetAttribute("height", "28");
     panel->AddItem(desc);
 }
 
@@ -364,30 +364,30 @@ void SettingsForm::ApplyWallpaper(const char* name)
 {
     const char* home = std::getenv("HOME");
     if (home == nullptr) return;
-    DString dir = DString(home) + DUI_T("/.config/polluxdesk");
+    U8String dir = U8String(home) + "/.config/polluxdesk";
     std::string mkdirCommand = "mkdir -p '" + std::string(dir.c_str()) + "'";
     std::system(mkdirCommand.c_str());
-    DString path = dir + DUI_T("/settings.conf");
+    U8String path = dir + "/settings.conf";
     FILE* file = std::fopen(path.c_str(), "a+");
     if (file == nullptr) return;
     std::fprintf(file, "wallpaper=%s\n", name);
     std::fclose(file);
     NotifyCompositor();
-    if (m_pStatus != nullptr) m_pStatus->SetText(DUI_T("壁纸已应用"));
+    if (m_pStatus != nullptr) m_pStatus->SetText("壁纸已应用");
 }
 
 void SettingsForm::ApplyResolution(const char* value)
 {
     const char* home = std::getenv("HOME");
     if (home == nullptr) return;
-    DString dir = DString(home) + DUI_T("/.config/polluxdesk");
+    U8String dir = U8String(home) + "/.config/polluxdesk";
     std::string mkdirCommand = "mkdir -p '" + std::string(dir.c_str()) + "'";
     std::system(mkdirCommand.c_str());
-    DString path = dir + DUI_T("/settings.conf");
+    U8String path = dir + "/settings.conf";
     FILE* file = std::fopen(path.c_str(), "a+");
     if (file == nullptr) return;
     std::fprintf(file, "resolution=%s\n", value);
     std::fclose(file);
     NotifyCompositor();
-    if (m_pStatus != nullptr) m_pStatus->SetText(DUI_T("分辨率已请求应用"));
+    if (m_pStatus != nullptr) m_pStatus->SetText("分辨率已请求应用");
 }

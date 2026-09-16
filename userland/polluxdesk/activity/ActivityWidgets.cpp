@@ -33,8 +33,8 @@ void HistoryGraph::SetSamples(const std::vector<float>& values, float scale)
     Invalidate();
 }
 
-void HistoryGraph::SetColours(const DString& line, const DString& fillTop,
-                              const DString& fillBottom, const DString& grid)
+void HistoryGraph::SetColours(const U8String& line, const U8String& fillTop,
+                              const U8String& fillBottom, const U8String& grid)
 {
     m_line = GetUiColor(line);
     m_fillTop = GetUiColor(fillTop);
@@ -132,7 +132,7 @@ void MeterBar::SetFraction(float fraction)
     Invalidate();
 }
 
-void MeterBar::SetColours(const DString& track, const DString& fill)
+void MeterBar::SetColours(const U8String& track, const U8String& fill)
 {
     m_track = GetUiColor(track);
     m_fill = GetUiColor(fill);

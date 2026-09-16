@@ -5,17 +5,17 @@
 class App : public ui::FrameworkThread
 {
 public:
-    App() : FrameworkThread(DUI_T("App"), ui::kThreadUI) {}
+    App() : FrameworkThread("App", ui::kThreadUI) {}
     void Run() { RunMessageLoop(); }
 
 private:
     void OnInit() override
     {
         ui::GlobalManager::Instance().Startup(
-            ui::MemoryResParam(GetEmbeddedResourcesData(), GetEmbeddedResourcesSize()));
+            ui::MemoryResParam(EmbeddedResources()));
         LaunchPadForm* window = new LaunchPadForm();
         window->CreateWnd(nullptr,
-            ui::WindowCreateParam(DUI_T("PolluxOS Launchpad"), true));
+            ui::WindowCreateParam("PolluxOS Launchpad", true));
         window->PostQuitMsgWhenClosed(true);
         window->SetLaunchHandler(nullptr);
         window->RefreshAndShow();

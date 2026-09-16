@@ -26,8 +26,8 @@ public:
     virtual ~LaunchPadForm() override;
 
     /** Resource-related interfaces: pure code mode, no layout XML is loaded. */
-    virtual DString GetSkinFolder() override;
-    virtual DString GetSkinFile() override;
+    virtual U8String GetSkinFolder() override;
+    virtual U8String GetSkinFile() override;
 
     /** Window creation attributes (borderless overlay, no shadow). */
     virtual void GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs) override;
@@ -38,9 +38,9 @@ public:
     /** One scanned .desktop application entry. */
     struct DesktopApp
     {
-        DString name;   // display name (Name= from the .desktop file)
-        DString exec;   // command line (Exec=, field codes stripped)
-        DString icon;   // resolved absolute path or embedded fallback path
+        U8String name;   // display name (Name= from the .desktop file)
+        U8String exec;   // command line (Exec=, field codes stripped)
+        U8String icon;   // resolved absolute path or embedded fallback path
     };
 
     /** Scan the freedesktop application directories. */
@@ -48,7 +48,7 @@ public:
 
     /** `cmd == nullptr + enabled == false`-style callback: invoked with the
      *  Exec line when a tile is clicked (the owner launches + hides). */
-    void SetLaunchHandler(std::function<void(const DString& cmd)> handler);
+    void SetLaunchHandler(std::function<void(const U8String& cmd)> handler);
 
     /** Re-scan applications, rebuild the grid and size/center the window. */
     void RefreshAndShow();
@@ -58,13 +58,13 @@ public:
 
 private:
     void BuildUi();
-    void LaunchCommand(const DString& command);
+    void LaunchCommand(const U8String& command);
 
     static const int kColumns = 8;        // grid columns
     static const int kMaxVisibleRows = 10000; // keep all rows in the scroll box
 
     std::vector<DesktopApp> m_apps;
-    std::function<void(const DString&)> m_launchHandler;
+    std::function<void(const U8String&)> m_launchHandler;
     ui::VBox* m_pCard = nullptr;         // frosted panel card
     ui::VScrollBox* m_pGrid = nullptr;   // scrollable app-grid container
     ui::HBox* m_pNav = nullptr;          // pager row (prev / n / next)

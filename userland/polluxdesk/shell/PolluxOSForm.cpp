@@ -31,103 +31,103 @@ namespace {
 // ---------------------------------------------------------------------------
 struct Palette
 {
-    DString barBg;          // frosted menu bar
-    DString barBorder;      // hairline under the menu bar
-    DString barHot;         // hovered menu-bar button
-    DString menuPanelBg;    // frosted dropdown panel
-    DString menuPanelLine;
-    DString menuItemHot;
-    DString dockBg;         // frosted dock
-    DString dockBorder;
-    DString dockSeparator;  // hairline before the trash
-    DString dockDot;        // running-application indicator
-    DString chipBg;         // minimized-window chip
-    DString chipBorder;
-    DString chipHot;
-    DString textDark;
-    DString textBody;
-    DString textHint;
-    DString accent;
-    DString danger;
-    DString transparent;
+    U8String barBg;          // frosted menu bar
+    U8String barBorder;      // hairline under the menu bar
+    U8String barHot;         // hovered menu-bar button
+    U8String menuPanelBg;    // frosted dropdown panel
+    U8String menuPanelLine;
+    U8String menuItemHot;
+    U8String dockBg;         // frosted dock
+    U8String dockBorder;
+    U8String dockSeparator;  // hairline before the trash
+    U8String dockDot;        // running-application indicator
+    U8String chipBg;         // minimized-window chip
+    U8String chipBorder;
+    U8String chipHot;
+    U8String textDark;
+    U8String textBody;
+    U8String textHint;
+    U8String accent;
+    U8String danger;
+    U8String transparent;
     // Which status-glyph set to load. dui cannot tint an SVG, so each glyph
     // ships in a dark and a light version and the shell picks one.
-    DString glyphVariant;
-    DString dockCanBody;    // trash-can fill, translucent like the reference
-    DString dockCanEdge;
+    U8String glyphVariant;
+    U8String dockCanBody;    // trash-can fill, translucent like the reference
+    U8String dockCanEdge;
 };
 
 Palette g_pal;
 
 // The accent at a lower alpha, for hover and selection washes. The settings
 // module hands the accent over as "#AARRGGBB", so only the alpha pair moves.
-DString AccentWash(const DString& accent, const char* alpha)
+U8String AccentWash(const U8String& accent, const char* alpha)
 {
-    if (accent.size() != 9 || accent[0] != DUI_T('#')) {
+    if (accent.size() != 9 || accent[0] != '#') {
         return accent;
     }
-    return DString(DUI_T("#")) + DString(alpha) + accent.substr(3);
+    return U8String("#") + U8String(alpha) + accent.substr(3);
 }
 
 void BuildPalette(const pollux::Settings& settings)
 {
     const bool dark = pollux::IsDark(settings);
-    const DString accent(pollux::AccentHex(settings));
+    const U8String accent(pollux::AccentHex(settings));
 
-    g_pal.transparent  = DUI_T("#00000000");
+    g_pal.transparent  = "#00000000";
     g_pal.accent       = accent;
-    g_pal.glyphVariant = dark ? DUI_T("white") : DUI_T("black");
+    g_pal.glyphVariant = dark ? "white" : "black";
     // A light can would vanish on the light dock and a dark one on the dark
     // dock, so the can follows the appearance the way macOS's does.
-    g_pal.dockCanBody  = dark ? DUI_T("#D9F2F2F5") : DUI_T("#E6F7F7FA");
-    g_pal.dockCanEdge  = dark ? DUI_T("#8CFFFFFF") : DUI_T("#5E000000");
-    g_pal.danger       = DUI_T("#FFFF453A");
+    g_pal.dockCanBody  = dark ? "#D9F2F2F5" : "#E6F7F7FA";
+    g_pal.dockCanEdge  = dark ? "#8CFFFFFF" : "#5E000000";
+    g_pal.danger       = "#FFFF453A";
     // Same accent, washed out -- one source of truth for the highlight colour.
     g_pal.barHot       = AccentWash(accent, "22");
     g_pal.menuItemHot  = AccentWash(accent, "33");
     g_pal.chipHot      = AccentWash(accent, "33");
 
     if (dark) {
-        g_pal.barBg        = DUI_T("#D91C1C1E");
-        g_pal.barBorder    = DUI_T("#26FFFFFF");
-        g_pal.menuPanelBg  = DUI_T("#F21C1C1E");
-        g_pal.menuPanelLine= DUI_T("#26FFFFFF");
-        g_pal.dockBg       = DUI_T("#B81C1C1E");
-        g_pal.dockBorder   = DUI_T("#2EFFFFFF");
-        g_pal.dockSeparator= DUI_T("#59FFFFFF");
-        g_pal.dockDot      = DUI_T("#B3FFFFFF");
-        g_pal.chipBg       = DUI_T("#26FFFFFF");
-        g_pal.chipBorder   = DUI_T("#33FFFFFF");
-        g_pal.textDark     = DUI_T("#FFF5F5F7");
-        g_pal.textBody     = DUI_T("#FFD8D8DC");
-        g_pal.textHint     = DUI_T("#FF98989D");
+        g_pal.barBg        = "#D91C1C1E";
+        g_pal.barBorder    = "#26FFFFFF";
+        g_pal.menuPanelBg  = "#F21C1C1E";
+        g_pal.menuPanelLine= "#26FFFFFF";
+        g_pal.dockBg       = "#B81C1C1E";
+        g_pal.dockBorder   = "#2EFFFFFF";
+        g_pal.dockSeparator= "#59FFFFFF";
+        g_pal.dockDot      = "#B3FFFFFF";
+        g_pal.chipBg       = "#26FFFFFF";
+        g_pal.chipBorder   = "#33FFFFFF";
+        g_pal.textDark     = "#FFF5F5F7";
+        g_pal.textBody     = "#FFD8D8DC";
+        g_pal.textHint     = "#FF98989D";
     } else {
-        g_pal.barBg        = DUI_T("#F2FFFFFF");
-        g_pal.barBorder    = DUI_T("#33000000");
-        g_pal.menuPanelBg  = DUI_T("#F5FFFFFF");
-        g_pal.menuPanelLine= DUI_T("#33000000");
-        g_pal.dockBg       = DUI_T("#C9FFFFFF");
-        g_pal.dockBorder   = DUI_T("#59FFFFFF");
-        g_pal.dockSeparator= DUI_T("#3D000000");
-        g_pal.dockDot      = DUI_T("#99000000");
-        g_pal.chipBg       = DUI_T("#1A000000");
-        g_pal.chipBorder   = DUI_T("#26000000");
-        g_pal.textDark     = DUI_T("#FF1D1D1F");
-        g_pal.textBody     = DUI_T("#FF3A3A3C");
-        g_pal.textHint     = DUI_T("#FF8E8E93");
+        g_pal.barBg        = "#F2FFFFFF";
+        g_pal.barBorder    = "#33000000";
+        g_pal.menuPanelBg  = "#F5FFFFFF";
+        g_pal.menuPanelLine= "#33000000";
+        g_pal.dockBg       = "#C9FFFFFF";
+        g_pal.dockBorder   = "#59FFFFFF";
+        g_pal.dockSeparator= "#3D000000";
+        g_pal.dockDot      = "#99000000";
+        g_pal.chipBg       = "#1A000000";
+        g_pal.chipBorder   = "#26000000";
+        g_pal.textDark     = "#FF1D1D1F";
+        g_pal.textBody     = "#FF3A3A3C";
+        g_pal.textHint     = "#FF8E8E93";
     }
 }
 
 // Number of fixed menu buttons: 文件 / 编辑 / 显示 / 前往 / 窗口 / 帮助.
 const int kMenuButtonCount = 6;
-const DString kMenuButtonText[kMenuButtonCount] = {
-    DUI_T("文件"), DUI_T("编辑"), DUI_T("显示"), DUI_T("前往"), DUI_T("窗口"), DUI_T("帮助")
+const U8String kMenuButtonText[kMenuButtonCount] = {
+    "文件", "编辑", "显示", "前往", "窗口", "帮助"
 };
 
 // Layout attributes are strings; this keeps the derived sizes readable.
-static DString Num(int value)
+static U8String Num(int value)
 {
-    return ui::StringUtil::Printf(DUI_T("%d"), value);
+    return ui::StringUtil::Printf("%d", value);
 }
 
 const int kPopoverWidth = 300;
@@ -135,9 +135,9 @@ const int kPopoverPad   = 10;
 const int kPopoverRowH  = 26;
 
 // "left,top,right,bottom" with equal horizontal margins.
-static DString MarginH(int px)
+static U8String MarginH(int px)
 {
-    return ui::StringUtil::Printf(DUI_T("%d,0,%d,0"), px, px);
+    return ui::StringUtil::Printf("%d,0,%d,0", px, px);
 }
 
 } // namespace
@@ -275,15 +275,15 @@ PolluxOSForm::~PolluxOSForm()
     }
 }
 
-DString PolluxOSForm::GetSkinFolder()
+U8String PolluxOSForm::GetSkinFolder()
 {
-    return DUI_T("");
+    return "";
 }
 
-DString PolluxOSForm::GetSkinFile()
+U8String PolluxOSForm::GetSkinFile()
 {
     // Pure code mode: no layout XML is loaded
-    return DUI_T("");
+    return "";
 }
 
 void PolluxOSForm::GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs)
@@ -340,8 +340,8 @@ void PolluxOSForm::LaunchApp(const char* cmdline)
     // the new client, so the DRM output is never torn down (no flicker).
     if (std::strcmp(cmdline, "/home/shxu/.local/bin/session-logout") == 0) {
         const char* home = std::getenv("HOME");
-        DString launcher = DString(home != nullptr ? home : "/home/shxu") +
-                           DUI_T("/projects-main/polluxos/build/polluxdesk/bin/launcher");
+        U8String launcher = U8String(home != nullptr ? home : "/home/shxu") +
+                           "/projects-main/polluxos/build/polluxdesk/bin/launcher";
         pid_t pid = fork();
         if (pid < 0) {
             perror("[polluxdesk] logout fork");
@@ -429,7 +429,7 @@ void PolluxOSForm::HideMenuPanel()
     m_openMenuIndex = -1;
     // Notify the compositor that the desktop dropdown is closed; it lowers the
     // shell back behind app windows and restores normal app interaction.
-    SetText(DUI_T("PolluxOS Desktop"));
+    SetText("PolluxOS Desktop");
 }
 
 void PolluxOSForm::ToggleMenu(int menuIndex)
@@ -473,9 +473,9 @@ void PolluxOSForm::ShowMenuPanel(const MenuItem* items, int count, int x, int y)
         if (entry.separator) {
             panelHeight += 9;   // 1px hairline + 4px vertical margins
             ui::Control* pSep = new ui::Control(this);
-            pSep->SetAttribute(DUI_T("height"), DUI_T("1"));
-            pSep->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-            pSep->SetAttribute(DUI_T("margin"), DUI_T("8,4,8,4"));
+            pSep->SetAttribute("height", "1");
+            pSep->SetAttribute("width", "stretch");
+            pSep->SetAttribute("margin", "8,4,8,4");
             pSep->SetBkColor(g_pal.menuPanelLine);
             pSep->SetMouseEnabled(false);
             m_pMenuPanel->AddItem(pSep);
@@ -484,13 +484,13 @@ void PolluxOSForm::ShowMenuPanel(const MenuItem* items, int count, int x, int y)
 
         panelHeight += kItemHeight;
         ui::Button* pItem = new ui::Button(this);
-        pItem->SetText(DString(entry.text));
-        pItem->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-        pItem->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-        pItem->SetAttribute(DUI_T("text_padding"), DUI_T("10,0,10,0"));
-        pItem->SetAttribute(DUI_T("height"), DUI_T("30"));
-        pItem->SetAttribute(DUI_T("width"), DUI_T("218"));
-        pItem->SetAttribute(DUI_T("margin"), DUI_T("0,0,0,0"));
+        pItem->SetText(U8String(entry.text));
+        pItem->SetAttribute("font", "system_14");
+        pItem->SetAttribute("text_align", "left,vcenter");
+        pItem->SetAttribute("text_padding", "10,0,10,0");
+        pItem->SetAttribute("height", "30");
+        pItem->SetAttribute("width", "218");
+        pItem->SetAttribute("margin", "0,0,0,0");
         pItem->SetStateColor(ui::kControlStateNormal, g_pal.transparent);
         pItem->SetStateColor(ui::kControlStateHot,
                              entry.enabled ? g_pal.menuItemHot : g_pal.transparent);
@@ -507,7 +507,7 @@ void PolluxOSForm::ShowMenuPanel(const MenuItem* items, int count, int x, int y)
         pItem->SetStateTextColor(ui::kControlStateNormal,
                             entry.enabled ? g_pal.textBody : g_pal.textHint);
         pItem->SetStateTextColor(ui::kControlStateDisabled, g_pal.textHint);
-        pItem->SetAttribute(DUI_T("cursor_type"), entry.enabled ? DUI_T("hand") : DUI_T("arrow"));
+        pItem->SetAttribute("cursor_type", entry.enabled ? "hand" : "arrow");
 
         const char* cmd = entry.cmd;
         pItem->AttachClick([this, cmd](const ui::EventArgs& /*args*/) {
@@ -520,8 +520,8 @@ void PolluxOSForm::ShowMenuPanel(const MenuItem* items, int count, int x, int y)
         m_pMenuPanel->AddItem(pItem);
     }
 
-    m_pMenuPanel->SetAttribute(DUI_T("height"),
-                               ui::StringUtil::Printf(DUI_T("%d"), panelHeight));
+    m_pMenuPanel->SetAttribute("height",
+                               ui::StringUtil::Printf("%d", panelHeight));
 
     ui::UiRect client;
     GetClientRect(client);
@@ -546,7 +546,7 @@ void PolluxOSForm::ShowMenuPanel(const MenuItem* items, int count, int x, int y)
     m_pMenuPanel->SetVisible(true);
     // Signal the compositor that a desktop dropdown is open so it can raise
     // the shell above app windows for the duration of the menu.
-    SetText(DUI_T("PolluxOS Desktop (menu)"));
+    SetText("PolluxOS Desktop (menu)");
     Invalidate(m_pMenuPanel->GetPos());
 }
 
@@ -685,8 +685,8 @@ void PolluxOSForm::BuildUi()
      * or shadows. */
     pRoot->SetBkColor(g_pal.transparent);
     pRoot->SetBorderColor(g_pal.transparent);
-    pRoot->SetAttribute(DUI_T("border_size"), DUI_T("0"));
-    pRoot->SetAttribute(DUI_T("padding"), DUI_T("0,0,0,0"));
+    pRoot->SetAttribute("border_size", "0");
+    pRoot->SetAttribute("padding", "0,0,0,0");
 
     BuildMenuBar(pRoot);
     BuildDesktopArea(pRoot);
@@ -701,11 +701,11 @@ void PolluxOSForm::BuildUi()
     m_pMenuPanel->SetKeepFloatPos(true);
     m_pMenuPanel->SetBkColor(g_pal.menuPanelBg);
     m_pMenuPanel->SetBorderColor(g_pal.menuPanelLine);
-    m_pMenuPanel->SetAttribute(DUI_T("border_size"), DUI_T("1"));
-    m_pMenuPanel->SetAttribute(DUI_T("width"), DUI_T("230"));
-    m_pMenuPanel->SetAttribute(DUI_T("padding"), DUI_T("6,6,6,6"));
+    m_pMenuPanel->SetAttribute("border_size", "1");
+    m_pMenuPanel->SetAttribute("width", "230");
+    m_pMenuPanel->SetAttribute("padding", "6,6,6,6");
     m_pMenuPanel->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(10, 10), false);
-    m_pMenuPanel->SetAttribute(DUI_T("border_round"), DUI_T("10,10"));
+    m_pMenuPanel->SetAttribute("border_round", "10,10");
     m_pMenuPanel->SetVisible(false);
     pRoot->AddItem(m_pMenuPanel);
 
@@ -767,30 +767,30 @@ void PolluxOSForm::RebuildUi()
 void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
 {
     ui::HBox* pTopBar = new ui::HBox(this);
-    pTopBar->SetAttribute(DUI_T("height"), DUI_T("30"));
+    pTopBar->SetAttribute("height", "30");
     pTopBar->SetBkColor(g_pal.barBg);
     pTopBar->SetBorderColor(g_pal.barBorder);
-    pTopBar->SetAttribute(DUI_T("bottom_border_size"), DUI_T("1"));
-    pTopBar->SetAttribute(DUI_T("padding"), DUI_T("12,0,12,0"));
+    pTopBar->SetAttribute("bottom_border_size", "1");
+    pTopBar->SetAttribute("padding", "12,0,12,0");
     pRoot->AddItem(pTopBar);
     m_pMenuBar = pTopBar;
 
     // Bold app menu, macOS style (the Apple-menu slot).
     ui::Button* pAppButton = new ui::Button(this);
-    pAppButton->SetText(DUI_T("PolluxOS"));
+    pAppButton->SetText("PolluxOS");
     m_pAppButton = pAppButton;
-    pAppButton->SetAttribute(DUI_T("font"), DUI_T("system_bold_14"));
+    pAppButton->SetAttribute("font", "system_bold_14");
     pAppButton->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
-    pAppButton->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-    pAppButton->SetAttribute(DUI_T("height"), DUI_T("24"));
-    pAppButton->SetAttribute(DUI_T("width"), DUI_T("auto"));
-    pAppButton->SetAttribute(DUI_T("margin"), DUI_T("0,3,4,3"));
-    pAppButton->SetAttribute(DUI_T("text_padding"), DUI_T("6,0,6,0"));
+    pAppButton->SetAttribute("text_align", "left,vcenter");
+    pAppButton->SetAttribute("height", "24");
+    pAppButton->SetAttribute("width", "auto");
+    pAppButton->SetAttribute("margin", "0,3,4,3");
+    pAppButton->SetAttribute("text_padding", "6,0,6,0");
     pAppButton->SetStateColor(ui::kControlStateNormal, g_pal.transparent);
     pAppButton->SetStateColor(ui::kControlStateHot, g_pal.barHot);
     pAppButton->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
     pAppButton->SetStateColorRound(ui::kControlStateHot, ui::UiSize(5, 5), false);
-    pAppButton->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+    pAppButton->SetAttribute("cursor_type", "hand");
     // macOS behavior: merely hovering the menu-bar title pops its menu open,
     // no click needed (click still works as a toggle).
     pAppButton->AttachMouseEnter([this, pAppButton](const ui::EventArgs& /*args*/) {
@@ -816,18 +816,18 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     for (int mi = 0; mi < kMenuButtonCount; ++mi) {
         ui::Button* pBtn = new ui::Button(this);
         pBtn->SetText(kMenuButtonText[mi]);
-        pBtn->SetAttribute(DUI_T("font"), DUI_T("system_14"));
+        pBtn->SetAttribute("font", "system_14");
         pBtn->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
-        pBtn->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-        pBtn->SetAttribute(DUI_T("height"), DUI_T("24"));
-        pBtn->SetAttribute(DUI_T("width"), DUI_T("auto"));
-        pBtn->SetAttribute(DUI_T("margin"), DUI_T("0,3,2,3"));
-        pBtn->SetAttribute(DUI_T("text_padding"), DUI_T("6,0,6,0"));
+        pBtn->SetAttribute("text_align", "left,vcenter");
+        pBtn->SetAttribute("height", "24");
+        pBtn->SetAttribute("width", "auto");
+        pBtn->SetAttribute("margin", "0,3,2,3");
+        pBtn->SetAttribute("text_padding", "6,0,6,0");
         pBtn->SetStateColor(ui::kControlStateNormal, g_pal.transparent);
         pBtn->SetStateColor(ui::kControlStateHot, g_pal.barHot);
         pBtn->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
         pBtn->SetStateColorRound(ui::kControlStateHot, ui::UiSize(5, 5), false);
-        pBtn->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pBtn->SetAttribute("cursor_type", "hand");
         // Hover-to-open: moving the pointer across the menu bar pops each
         // dropdown without a click (macOS-style menu tracking).
         pBtn->AttachMouseEnter([this, mi](const ui::EventArgs& /*args*/) {
@@ -849,8 +849,8 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
 
     // Right side: spacer pushes the window controls + clock to the right edge.
     ui::Control* pTopSpacer = new ui::Control(this);
-    pTopSpacer->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    pTopSpacer->SetAttribute(DUI_T("mouse_enabled"), DUI_T("false"));
+    pTopSpacer->SetAttribute("width", "stretch");
+    pTopSpacer->SetAttribute("mouse_enabled", "false");
     pTopBar->AddItem(pTopSpacer);
 
     // Status glyphs, as macOS has them: small monochrome icons rather than
@@ -858,17 +858,17 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     // version and the palette says which to load.
     auto AddStatusGlyph = [this, pTopBar](const char* glyph) {
         ui::Button* pButton = new ui::Button(this);
-        pButton->SetAttribute(DUI_T("width"), DUI_T("38"));
-        pButton->SetAttribute(DUI_T("height"), DUI_T("24"));
-        pButton->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-        pButton->SetBkImage(DString(DUI_T("file='polluxdesk/icons/status_")) + glyph +
-                            DUI_T("_") + g_pal.glyphVariant +
-                            DUI_T(".svg' width='30' height='19' halign='center' valign='center'"));
+        pButton->SetAttribute("width", "38");
+        pButton->SetAttribute("height", "24");
+        pButton->SetAttribute("cursor_type", "hand");
+        pButton->SetBkImage(U8String("file='polluxdesk/icons/status_") + glyph +
+                            "_" + g_pal.glyphVariant +
+                            ".svg' width='30' height='19' halign='center' valign='center'");
         pButton->SetStateColor(ui::kControlStateNormal, g_pal.transparent);
         pButton->SetStateColor(ui::kControlStateHot, g_pal.barHot);
         pButton->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
         pButton->SetStateColorRound(ui::kControlStateHot, ui::UiSize(5, 5), false);
-        pButton->SetAttribute(DUI_T("border_round"), DUI_T("5,5"));
+        pButton->SetAttribute("border_round", "5,5");
         pTopBar->AddItem(pButton);
         return pButton;
     };
@@ -903,12 +903,12 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     // The reading sits against its own glyph, the way macOS shows it when the
     // percentage is switched on.
     m_pBatteryLabel = new ui::Label(this);
-    m_pBatteryLabel->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+    m_pBatteryLabel->SetAttribute("font", "system_12");
     m_pBatteryLabel->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
-    m_pBatteryLabel->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-    m_pBatteryLabel->SetAttribute(DUI_T("width"), DUI_T("42"));
-    m_pBatteryLabel->SetAttribute(DUI_T("height"), DUI_T("24"));
-    m_pBatteryLabel->SetText(DUI_T("--%"));
+    m_pBatteryLabel->SetAttribute("text_align", "left,vcenter");
+    m_pBatteryLabel->SetAttribute("width", "42");
+    m_pBatteryLabel->SetAttribute("height", "24");
+    m_pBatteryLabel->SetText("--%");
     m_pBatteryLabel->SetMouseEnabled(false);
     pTopBar->AddItem(m_pBatteryLabel);
 
@@ -917,7 +917,7 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     // does not steal the keyboard from the window in front -- so there is
     // nothing here that could receive typing. It opens the app grid instead.
     ui::Button* pSearch = AddStatusGlyph("search");
-    pSearch->SetToolTipText(DUI_T("打开启动台"));
+    pSearch->SetToolTipText("打开启动台");
     pSearch->AttachClick([this](const ui::EventArgs&) {
         HideMenuPanel();
         ShowLaunchPad();
@@ -925,19 +925,19 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     });
 
     ui::Button* controlCenter = new ui::Button(this);
-    controlCenter->SetAttribute(DUI_T("height"), DUI_T("24"));
-    controlCenter->SetAttribute(DUI_T("width"), DUI_T("40"));
-    controlCenter->SetAttribute(DUI_T("margin"), DUI_T("4,3,4,3"));
-    controlCenter->SetBkImage(DString(DUI_T("file='polluxdesk/icons/status_controlcenter_")) +
+    controlCenter->SetAttribute("height", "24");
+    controlCenter->SetAttribute("width", "40");
+    controlCenter->SetAttribute("margin", "4,3,4,3");
+    controlCenter->SetBkImage(U8String("file='polluxdesk/icons/status_controlcenter_") +
                               g_pal.glyphVariant +
-                              DUI_T(".svg' width='27' height='17' halign='center' valign='center'"));
+                              ".svg' width='27' height='17' halign='center' valign='center'");
     controlCenter->SetStateColor(ui::kControlStateNormal, g_pal.transparent);
     controlCenter->SetStateColor(ui::kControlStateHot, g_pal.barHot);
     controlCenter->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
     controlCenter->SetStateColorRound(ui::kControlStateHot, ui::UiSize(5, 5), false);
-    controlCenter->SetAttribute(DUI_T("border_round"), DUI_T("5,5"));
-    controlCenter->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-    controlCenter->SetToolTipText(DUI_T("控制中心"));
+    controlCenter->SetAttribute("border_round", "5,5");
+    controlCenter->SetAttribute("cursor_type", "hand");
+    controlCenter->SetToolTipText("控制中心");
     controlCenter->AttachClick([this, controlCenter](const ui::EventArgs&) {
         const ui::UiRect rc = controlCenter->GetRect();
         HideMenuPanel();
@@ -948,12 +948,12 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
 
     // The clock is last, at the very right edge, as on macOS.
     m_pClockLabel = new ui::Label(this);
-    m_pClockLabel->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+    m_pClockLabel->SetAttribute("font", "system_12");
     m_pClockLabel->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
-    m_pClockLabel->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
-    m_pClockLabel->SetAttribute(DUI_T("width"), DUI_T("160"));
-    m_pClockLabel->SetAttribute(DUI_T("margin"), DUI_T("0,0,8,0"));
-    m_pClockLabel->SetText(DUI_T("--月--日 周- --:--"));
+    m_pClockLabel->SetAttribute("text_align", "right,vcenter");
+    m_pClockLabel->SetAttribute("width", "160");
+    m_pClockLabel->SetAttribute("margin", "0,0,8,0");
+    m_pClockLabel->SetText("--月--日 周- --:--");
     m_pClockLabel->SetMouseEnabled(false);
     pTopBar->AddItem(m_pClockLabel);
 }
@@ -964,8 +964,8 @@ void PolluxOSForm::BuildDesktopArea(ui::VBox* pRoot)
     // middle. It only provides the desktop right-click quick menu and dismisses
     // any open dropdown on a plain left click.
     ui::VBox* pDesktop = new ui::VBox(this);
-    pDesktop->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-    pDesktop->SetAttribute(DUI_T("mouse_enabled"), DUI_T("true"));
+    pDesktop->SetAttribute("height", "stretch");
+    pDesktop->SetAttribute("mouse_enabled", "true");
     pRoot->AddItem(pDesktop);
 
     // A plain left click on the wallpaper dismisses any open dropdown,
@@ -1171,7 +1171,7 @@ void PolluxOSForm::GrabPendingThumbnail()
     // window anyway.
     pollux::Run(cmd.c_str());
 
-    SetText(ui::StringUtil::Printf(DUI_T("PolluxOS Desktop (thumb-ready:%lu)"), id));
+    SetText(ui::StringUtil::Printf("PolluxOS Desktop (thumb-ready:%lu)", id));
     m_titleMarkerPending = true;
     m_uiDirty = true;   // the shelf can show the picture on the next build
 }
@@ -1248,8 +1248,8 @@ static void SetRadius(ui::Control* pControl, int radius, bool interactive)
         pControl->SetStateColorRound(ui::kControlStateHot, size, false);
         pControl->SetStateColorRound(ui::kControlStatePushed, size, false);
     }
-    pControl->SetAttribute(DUI_T("border_round"),
-        ui::StringUtil::Printf(DUI_T("%d,%d"), radius, radius));
+    pControl->SetAttribute("border_round",
+        ui::StringUtil::Printf("%d,%d", radius, radius));
 }
 
 // The trash can, drawn out of dui primitives. The resource root is pinned to
@@ -1267,17 +1267,17 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
     // macOS draws the trash as a translucent can standing on the dock, with
     // no tile behind it -- so this one follows the appearance instead of
     // carrying the Settings tile's grey.
-    const DString canBody   = g_pal.dockCanBody;
-    const DString canEdge   = g_pal.dockCanEdge;
+    const U8String canBody   = g_pal.dockCanBody;
+    const U8String canEdge   = g_pal.dockCanEdge;
 
     ui::ButtonVBox* pTile = new ui::ButtonVBox(pWindow);
-    pTile->SetAttribute(DUI_T("height"), Num(size));
-    pTile->SetAttribute(DUI_T("width"), Num(size));
+    pTile->SetAttribute("height", Num(size));
+    pTile->SetAttribute("width", Num(size));
     pTile->SetBkColor(g_pal.transparent);
     pTile->SetBorderColor(ui::kControlStateNormal, g_pal.transparent);
     pTile->SetBorderColor(ui::kControlStateHot, g_pal.accent);
-    pTile->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-    pTile->SetToolTipText(DUI_T("废纸篓"));
+    pTile->SetAttribute("cursor_type", "hand");
+    pTile->SetToolTipText("废纸篓");
     SetRadius(pTile, scale(14, 56), true);
 
     // dui splits centring in a VBox between the layout and the child:
@@ -1285,7 +1285,7 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
     // there is no horizontal equivalent, so each part carries its own
     // halign="center". With only the layout attribute the can sits against
     // the tile's left edge.
-    pTile->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
+    pTile->SetAttribute("child_align", "vcenter");
 
     // Lid handle, lid, then the body: stacked vertically so the can grows
     // from the top down as the icon size changes.
@@ -1295,50 +1295,50 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
     const int bodyH   = scale(26, 56);
 
     ui::Control* pHandle = new ui::Control(pWindow);
-    pHandle->SetAttribute(DUI_T("halign"), DUI_T("center"));
-    pHandle->SetAttribute(DUI_T("width"), Num(scale(10, 56)));
-    pHandle->SetAttribute(DUI_T("height"), Num(handleH));
+    pHandle->SetAttribute("halign", "center");
+    pHandle->SetAttribute("width", Num(scale(10, 56)));
+    pHandle->SetAttribute("height", Num(handleH));
     pHandle->SetBkColor(canBody);
     pHandle->SetMouseEnabled(false);
     SetRadius(pHandle, std::max(1, handleH / 2), false);
     pTile->AddItem(pHandle);
 
     ui::Control* pLid = new ui::Control(pWindow);
-    pLid->SetAttribute(DUI_T("halign"), DUI_T("center"));
-    pLid->SetAttribute(DUI_T("width"), Num(scale(26, 56)));
-    pLid->SetAttribute(DUI_T("height"), Num(lidH));
+    pLid->SetAttribute("halign", "center");
+    pLid->SetAttribute("width", Num(scale(26, 56)));
+    pLid->SetAttribute("height", Num(lidH));
     pLid->SetBkColor(canBody);
     pLid->SetBorderColor(canEdge);
-    pLid->SetAttribute(DUI_T("border_size"), DUI_T("1"));
+    pLid->SetAttribute("border_size", "1");
     pLid->SetMouseEnabled(false);
     SetRadius(pLid, std::max(1, lidH / 2), false);
     pTile->AddItem(pLid);
 
     ui::Control* pGap = new ui::Control(pWindow);
-    pGap->SetAttribute(DUI_T("halign"), DUI_T("center"));
-    pGap->SetAttribute(DUI_T("height"), Num(std::max(1, scale(2, 56))));
+    pGap->SetAttribute("halign", "center");
+    pGap->SetAttribute("height", Num(std::max(1, scale(2, 56))));
     pGap->SetMouseEnabled(false);
     pTile->AddItem(pGap);
 
     // HBox so the three ribs stand upright.
     ui::HBox* pBody = new ui::HBox(pWindow);
-    pBody->SetAttribute(DUI_T("halign"), DUI_T("center"));
-    pBody->SetAttribute(DUI_T("width"), Num(bodyW));
-    pBody->SetAttribute(DUI_T("height"), Num(bodyH));
+    pBody->SetAttribute("halign", "center");
+    pBody->SetAttribute("width", Num(bodyW));
+    pBody->SetAttribute("height", Num(bodyH));
     pBody->SetBkColor(canBody);
     pBody->SetBkColor2(canEdge);
-    pBody->SetBkColor2Direction(DUI_T("1"));
+    pBody->SetBkColor2Direction("1");
     pBody->SetBorderColor(canEdge);
-    pBody->SetAttribute(DUI_T("border_size"), DUI_T("1"));
-    pBody->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
+    pBody->SetAttribute("border_size", "1");
+    pBody->SetAttribute("child_align", "hcenter,vcenter");
     pBody->SetMouseEnabled(false);
     SetRadius(pBody, std::max(2, scale(4, 56)), false);
 
     for (int i = 0; i < 3; ++i) {
         ui::Control* pRib = new ui::Control(pWindow);
-        pRib->SetAttribute(DUI_T("width"), DUI_T("1"));
-        pRib->SetAttribute(DUI_T("height"), Num(std::max(4, bodyH - scale(8, 56))));
-        pRib->SetAttribute(DUI_T("margin"), MarginH(std::max(1, scale(2, 56))));
+        pRib->SetAttribute("width", "1");
+        pRib->SetAttribute("height", Num(std::max(4, bodyH - scale(8, 56))));
+        pRib->SetAttribute("margin", MarginH(std::max(1, scale(2, 56))));
         pRib->SetBkColor(canEdge);
         pRib->SetMouseEnabled(false);
         pBody->AddItem(pRib);
@@ -1358,16 +1358,16 @@ static ui::ButtonVBox* MakeTrashTile(ui::Window* pWindow, int size)
 // ---------------------------------------------------------------------------
 // Left-aligned line of text inside a popover.
 static ui::Label* AddPopoverText(ui::Window* pWindow, ui::VBox* pPanel,
-                                 const DString& text, const DString& colour,
-                                 const DString& font)
+                                 const U8String& text, const U8String& colour,
+                                 const U8String& font)
 {
     ui::Label* pLabel = new ui::Label(pWindow);
     pLabel->SetText(text);
-    pLabel->SetAttribute(DUI_T("font"), font);
+    pLabel->SetAttribute("font", font);
     pLabel->SetStateTextColor(ui::kControlStateNormal, colour);
-    pLabel->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-    pLabel->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    pLabel->SetAttribute(DUI_T("height"), Num(kPopoverRowH));
+    pLabel->SetAttribute("text_align", "left,vcenter");
+    pLabel->SetAttribute("width", "stretch");
+    pLabel->SetAttribute("height", Num(kPopoverRowH));
     pLabel->SetMouseEnabled(false);
     pPanel->AddItem(pLabel);
     return pLabel;
@@ -1375,36 +1375,36 @@ static ui::Label* AddPopoverText(ui::Window* pWindow, ui::VBox* pPanel,
 
 // A section divider with a dim heading, which is how macOS groups a popover.
 static void AddPopoverSection(ui::Window* pWindow, ui::VBox* pPanel,
-                              const DString& text)
+                              const U8String& text)
 {
     ui::Control* pLine = new ui::Control(pWindow);
-    pLine->SetAttribute(DUI_T("height"), DUI_T("1"));
-    pLine->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    pLine->SetAttribute(DUI_T("margin"), DUI_T("0,8,0,4"));
+    pLine->SetAttribute("height", "1");
+    pLine->SetAttribute("width", "stretch");
+    pLine->SetAttribute("margin", "0,8,0,4");
     pLine->SetBkColor(g_pal.menuPanelLine);
     pLine->SetMouseEnabled(false);
     pPanel->AddItem(pLine);
 
     ui::Label* pTitle = AddPopoverText(pWindow, pPanel, text, g_pal.textHint,
-                                       DUI_T("system_12"));
-    pTitle->SetAttribute(DUI_T("height"), DUI_T("20"));
+                                       "system_12");
+    pTitle->SetAttribute("height", "20");
 }
 
 // A round-ish chip used for the accent and wallpaper swatches.
-static ui::Button* MakeSwatch(ui::Window* pWindow, const DString& colour,
+static ui::Button* MakeSwatch(ui::Window* pWindow, const U8String& colour,
                               bool selected)
 {
     ui::Button* pSwatch = new ui::Button(pWindow);
-    pSwatch->SetAttribute(DUI_T("width"), DUI_T("34"));
-    pSwatch->SetAttribute(DUI_T("height"), DUI_T("24"));
-    pSwatch->SetAttribute(DUI_T("margin"), DUI_T("0,0,8,0"));
-    pSwatch->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+    pSwatch->SetAttribute("width", "34");
+    pSwatch->SetAttribute("height", "24");
+    pSwatch->SetAttribute("margin", "0,0,8,0");
+    pSwatch->SetAttribute("cursor_type", "hand");
     pSwatch->SetStateColor(ui::kControlStateNormal, colour);
     pSwatch->SetStateColor(ui::kControlStateHot, colour);
     pSwatch->SetBorderColor(ui::kControlStateNormal,
                             selected ? g_pal.accent : g_pal.chipBorder);
     pSwatch->SetBorderColor(ui::kControlStateHot, g_pal.accent);
-    pSwatch->SetAttribute(DUI_T("border_size"), DUI_T("2"));
+    pSwatch->SetAttribute("border_size", "2");
     SetRadius(pSwatch, 6, true);
     return pSwatch;
 }
@@ -1492,13 +1492,13 @@ void PolluxOSForm::ShowPopover(int x, int y, int width,
         py = 30;
     }
 
-    m_pMenuPanel->SetAttribute(DUI_T("width"), Num(width));
-    m_pMenuPanel->SetAttribute(DUI_T("height"), Num(height));
+    m_pMenuPanel->SetAttribute("width", Num(width));
+    m_pMenuPanel->SetAttribute("height", Num(height));
     m_pMenuPanel->SetPos(ui::UiRect(px, py, px + width, py + height));
     m_pMenuPanel->SetPaintOrder(100);
     m_pMenuPanel->SetVisible(true);
     // Raise the shell above app windows for as long as the panel is open.
-    SetText(DUI_T("PolluxOS Desktop (menu)"));
+    SetText("PolluxOS Desktop (menu)");
     Invalidate(m_pMenuPanel->GetPos());
 }
 
@@ -1506,43 +1506,43 @@ void PolluxOSForm::ShowVolumePanel(int x, int y)
 {
     ShowPopover(x, y, kPopoverWidth, [this](ui::VBox* pPanel) -> int {
         int h = kPopoverPad * 2;
-        AddPopoverText(this, pPanel, DUI_T("声音"), g_pal.textDark, DUI_T("system_15"));
+        AddPopoverText(this, pPanel, "声音", g_pal.textDark, "system_15");
         h += kPopoverRowH;
 
         int percent = ReadVolumePercent();
         if (percent < 0) {
-            AddPopoverText(this, pPanel, DUI_T("这台机器没有可用的混音器"),
-                           g_pal.textHint, DUI_T("system_13"));
+            AddPopoverText(this, pPanel, "这台机器没有可用的混音器",
+                           g_pal.textHint, "system_13");
             return h + kPopoverRowH;
         }
 
         // A slider and its reading, side by side.
         ui::HBox* pRow = new ui::HBox(this);
-        pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pRow->SetAttribute(DUI_T("height"), DUI_T("26"));
+        pRow->SetAttribute("width", "stretch");
+        pRow->SetAttribute("height", "26");
 
         ui::Slider* pSlider = new ui::Slider(this);
-        pSlider->SetClass(DUI_T("slider_horizontal_green"));
-        pSlider->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pSlider->SetAttribute(DUI_T("height"), DUI_T("26"));
-        pSlider->SetAttribute(DUI_T("thumb_size"), DUI_T("16,16"));
-        pSlider->SetAttribute(DUI_T("progress_color"), g_pal.accent);
+        pSlider->SetClass("slider_horizontal_green");
+        pSlider->SetAttribute("width", "stretch");
+        pSlider->SetAttribute("height", "26");
+        pSlider->SetAttribute("thumb_size", "16,16");
+        pSlider->SetAttribute("progress_color", g_pal.accent);
         pSlider->SetMinValue(0);
         pSlider->SetMaxValue(100);
         pSlider->SetValue(percent);
-        pSlider->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pSlider->SetAttribute("cursor_type", "hand");
         ui::Label* pValue = new ui::Label(this);
-        pValue->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        pValue->SetAttribute("font", "system_12");
         pValue->SetStateTextColor(ui::kControlStateNormal, g_pal.textBody);
-        pValue->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
-        pValue->SetAttribute(DUI_T("width"), DUI_T("44"));
-        pValue->SetText(Num(percent) + DUI_T("%"));
+        pValue->SetAttribute("text_align", "right,vcenter");
+        pValue->SetAttribute("width", "44");
+        pValue->SetText(Num(percent) + "%");
 
         pSlider->AttachValueChanged([this, pValue](const ui::EventArgs& args) {
             int value = static_cast<int>(args.wParam);
             if (value < 0) value = 0;
             if (value > 100) value = 100;
-            pValue->SetText(Num(value) + DUI_T("%"));
+            pValue->SetText(Num(value) + "%");
             pollux::Run(("mixer vol=" + std::to_string(value) + "%").c_str());
             return true;
         });
@@ -1553,11 +1553,11 @@ void PolluxOSForm::ShowVolumePanel(int x, int y)
         h += 26;
 
         ui::CheckBox* pMute = new ui::CheckBox(this);
-        pMute->SetText(DUI_T("静音"));
-        pMute->SetAttribute(DUI_T("font"), DUI_T("system_13"));
+        pMute->SetText("静音");
+        pMute->SetAttribute("font", "system_13");
         pMute->SetStateTextColor(ui::kControlStateNormal, g_pal.textBody);
-        pMute->SetAttribute(DUI_T("height"), Num(kPopoverRowH));
-        pMute->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pMute->SetAttribute("height", Num(kPopoverRowH));
+        pMute->SetAttribute("cursor_type", "hand");
         pMute->Selected(ReadVolumeMuted());
         pMute->AttachSelect([this](const ui::EventArgs&) {
             const bool muted = !ReadVolumeMuted();
@@ -1573,7 +1573,7 @@ void PolluxOSForm::ShowWifiPanel(int x, int y)
 {
     ShowPopover(x, y, kPopoverWidth, [this](ui::VBox* pPanel) -> int {
         int h = kPopoverPad * 2;
-        AddPopoverText(this, pPanel, DUI_T("Wi-Fi"), g_pal.textDark, DUI_T("system_15"));
+        AddPopoverText(this, pPanel, "Wi-Fi", g_pal.textDark, "system_15");
         h += kPopoverRowH;
 
         // The same data layer the Wi-Fi window uses, so the two always agree
@@ -1584,24 +1584,24 @@ void PolluxOSForm::ShowWifiPanel(int x, int y)
         wifi::Status status;
         wifi.ReadStatus(status);
         AddPopoverText(this, pPanel,
-                       status.ssid.empty() ? DString(DUI_T("未连接")) : DString(status.ssid.c_str()),
+                       status.ssid.empty() ? U8String("未连接") : U8String(status.ssid.c_str()),
                        status.ssid.empty() ? g_pal.textHint : g_pal.textBody,
-                       DUI_T("system_13"));
+                       "system_13");
         h += kPopoverRowH;
 
         std::vector<wifi::Network> networks;
         std::string scanError;
         const bool scanned = wifi.Scan(networks, scanError);
-        AddPopoverSection(this, pPanel, DUI_T("网络"));
+        AddPopoverSection(this, pPanel, "网络");
         h += 1 + 8 + 4 + 20;   // the divider and its margins, then the heading
 
         if (!scanned) {
-            AddPopoverText(this, pPanel, DString(scanError.c_str()), g_pal.textHint,
-                           DUI_T("system_13"));
+            AddPopoverText(this, pPanel, U8String(scanError.c_str()), g_pal.textHint,
+                           "system_13");
             h += kPopoverRowH;
         } else if (networks.empty()) {
-            AddPopoverText(this, pPanel, DUI_T("没有扫描到网络"), g_pal.textHint,
-                           DUI_T("system_13"));
+            AddPopoverText(this, pPanel, "没有扫描到网络", g_pal.textHint,
+                           "system_13");
             h += kPopoverRowH;
         }
 
@@ -1613,9 +1613,9 @@ void PolluxOSForm::ShowWifiPanel(int x, int y)
             // Without the control socket nothing can be changed from here
             // either, so the list stays plain text with the reason below.
             if (!status.haveControl) {
-                AddPopoverText(this, pPanel, DString(network.ssid.c_str()),
+                AddPopoverText(this, pPanel, U8String(network.ssid.c_str()),
                                current ? g_pal.textBody : g_pal.textHint,
-                               DUI_T("system_13"));
+                               "system_13");
                 h += kPopoverRowH;
                 continue;
             }
@@ -1626,10 +1626,10 @@ void PolluxOSForm::ShowWifiPanel(int x, int y)
             // because a password needs the keyboard and this panel is part of
             // the shell, which the compositor never gives one.
             ui::ButtonHBox* pRow = new ui::ButtonHBox(this);
-            pRow->SetAttribute(DUI_T("height"), DUI_T("30"));
-            pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-            pRow->SetAttribute(DUI_T("padding"), DUI_T("8,0,8,0"));
-            pRow->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+            pRow->SetAttribute("height", "30");
+            pRow->SetAttribute("width", "stretch");
+            pRow->SetAttribute("padding", "8,0,8,0");
+            pRow->SetAttribute("cursor_type", "hand");
             pRow->SetStateColor(ui::kControlStateNormal,
                                 current ? g_pal.barHot : g_pal.transparent);
             pRow->SetStateColor(ui::kControlStateHot, g_pal.menuItemHot);
@@ -1638,24 +1638,24 @@ void PolluxOSForm::ShowWifiPanel(int x, int y)
             h += 30;
 
             ui::Label* pName = new ui::Label(this);
-            pName->SetText(DString(network.ssid.c_str()));
-            pName->SetAttribute(DUI_T("font"), DUI_T("system_13"));
+            pName->SetText(U8String(network.ssid.c_str()));
+            pName->SetAttribute("font", "system_13");
             pName->SetStateTextColor(ui::kControlStateNormal, g_pal.textBody);
-            pName->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-            pName->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+            pName->SetAttribute("text_align", "left,vcenter");
+            pName->SetAttribute("width", "stretch");
             pName->SetMouseEnabled(false);
             pRow->AddItem(pName);
 
             ui::Label* pState = new ui::Label(this);
-            pState->SetText(current ? DUI_T("已连接")
+            pState->SetText(current ? "已连接"
                                     : (network.saved
-                                           ? DUI_T("已保存")
-                                           : (network.secured ? DUI_T("需密码") : DUI_T(""))));
-            pState->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+                                           ? "已保存"
+                                           : (network.secured ? "需密码" : "")));
+            pState->SetAttribute("font", "system_12");
             pState->SetStateTextColor(ui::kControlStateNormal,
                                       current ? g_pal.accent : g_pal.textHint);
-            pState->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
-            pState->SetAttribute(DUI_T("width"), DUI_T("60"));
+            pState->SetAttribute("text_align", "right,vcenter");
+            pState->SetAttribute("width", "60");
             pState->SetMouseEnabled(false);
             pRow->AddItem(pState);
 
@@ -1686,28 +1686,28 @@ void PolluxOSForm::ShowWifiPanel(int x, int y)
             });
         }
 
-        AddPopoverSection(this, pPanel, DUI_T(""));
+        AddPopoverSection(this, pPanel, "");
         h += 1 + 8 + 4 + 20;
         // The keyboard, not privilege, is what this panel lacks: the shell is
         // the bottom-most surface and the compositor never focuses it, so a
         // password can only be typed into a window of its own.
         AddPopoverText(this, pPanel,
                        status.haveControl
-                           ? DUI_T("需密码的网络会打开 Wi-Fi 窗口输入")
-                           : DUI_T("只读：无法在此更改网络，原因见 Wi-Fi 窗口"),
-                       g_pal.textHint, DUI_T("system_12"));
+                           ? "需密码的网络会打开 Wi-Fi 窗口输入"
+                           : "只读：无法在此更改网络，原因见 Wi-Fi 窗口",
+                       g_pal.textHint, "system_12");
         h += kPopoverRowH;
 
         ui::Button* pOpen = new ui::Button(this);
-        pOpen->SetText(DUI_T("打开 Wi-Fi 设置…"));
-        pOpen->SetAttribute(DUI_T("font"), DUI_T("system_13"));
-        pOpen->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pOpen->SetAttribute(DUI_T("height"), DUI_T("30"));
-        pOpen->SetAttribute(DUI_T("margin"), DUI_T("0,10,0,0"));
-        pOpen->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pOpen->SetText("打开 Wi-Fi 设置…");
+        pOpen->SetAttribute("font", "system_13");
+        pOpen->SetAttribute("width", "stretch");
+        pOpen->SetAttribute("height", "30");
+        pOpen->SetAttribute("margin", "0,10,0,0");
+        pOpen->SetAttribute("cursor_type", "hand");
         pOpen->SetStateColor(ui::kControlStateNormal, g_pal.accent);
         pOpen->SetStateColor(ui::kControlStateHot, g_pal.accent);
-        pOpen->SetStateTextColor(ui::kControlStateNormal, DUI_T("#FFFFFFFF"));
+        pOpen->SetStateTextColor(ui::kControlStateNormal, "#FFFFFFFF");
         SetRadius(pOpen, 7, true);
         pOpen->AttachClick([this](const ui::EventArgs&) {
             HideMenuPanel();
@@ -1724,7 +1724,7 @@ void PolluxOSForm::ShowBatteryPanel(int x, int y)
 {
     ShowPopover(x, y, kPopoverWidth, [this](ui::VBox* pPanel) -> int {
         int h = kPopoverPad * 2;
-        AddPopoverText(this, pPanel, DUI_T("电池"), g_pal.textDark, DUI_T("system_15"));
+        AddPopoverText(this, pPanel, "电池", g_pal.textDark, "system_15");
         h += kPopoverRowH;
 
         std::string life = pollux::Trim(pollux::Run("sysctl -n hw.acpi.battery.life 2>/dev/null"));
@@ -1732,26 +1732,26 @@ void PolluxOSForm::ShowBatteryPanel(int x, int y)
         const bool online = AcOnline();
 
         if (life.empty()) {
-            AddPopoverText(this, pPanel, DUI_T("这台机器没有电池"), g_pal.textHint,
-                           DUI_T("system_13"));
+            AddPopoverText(this, pPanel, "这台机器没有电池", g_pal.textHint,
+                           "system_13");
             return h + kPopoverRowH;
         }
 
-        AddPopoverText(this, pPanel, DString(life.c_str()) + DUI_T("%"),
-                       g_pal.textDark, DUI_T("system_20"));
+        AddPopoverText(this, pPanel, U8String(life.c_str()) + "%",
+                       g_pal.textDark, "system_20");
         h += kPopoverRowH + 6;
 
         const int minutes = std::atoi(time.c_str());
         if (minutes > 0) {
             AddPopoverText(this, pPanel,
-                           online ? DString(DUI_T("充满还需 ")) + Num(minutes) + DUI_T(" 分钟")
-                                  : DString(DUI_T("剩余 ")) + Num(minutes) + DUI_T(" 分钟"),
-                           g_pal.textBody, DUI_T("system_13"));
+                           online ? U8String("充满还需 ") + Num(minutes) + " 分钟"
+                                  : U8String("剩余 ") + Num(minutes) + " 分钟",
+                           g_pal.textBody, "system_13");
             h += kPopoverRowH;
         }
         AddPopoverText(this, pPanel,
-                       online ? DUI_T("已接通电源") : DUI_T("使用电池供电"),
-                       g_pal.textHint, DUI_T("system_13"));
+                       online ? "已接通电源" : "使用电池供电",
+                       g_pal.textHint, "system_13");
         return h + kPopoverRowH;
     });
 }
@@ -1760,32 +1760,32 @@ void PolluxOSForm::ShowControlCentre(int x, int y)
 {
     ShowPopover(x, y, kPopoverWidth, [this](ui::VBox* pPanel) -> int {
         int h = kPopoverPad * 2;
-        AddPopoverText(this, pPanel, DUI_T("控制中心"), g_pal.textDark, DUI_T("system_15"));
+        AddPopoverText(this, pPanel, "控制中心", g_pal.textDark, "system_15");
         h += kPopoverRowH;
 
         // --- appearance ---------------------------------------------------
-        AddPopoverSection(this, pPanel, DUI_T("外观"));
+        AddPopoverSection(this, pPanel, "外观");
         h += 1 + 8 + 4 + 20;
         {
             ui::HBox* pRow = new ui::HBox(this);
-            pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-            pRow->SetAttribute(DUI_T("height"), DUI_T("28"));
+            pRow->SetAttribute("width", "stretch");
+            pRow->SetAttribute("height", "28");
             const char* kLabels[] = { "浅色", "深色", "自动" };
             const char* kValues[] = { "light", "dark", "auto" };
             for (int i = 0; i < 3; ++i) {
                 ui::Button* pChoice = new ui::Button(this);
-                pChoice->SetText(DString(kLabels[i]));
-                pChoice->SetAttribute(DUI_T("font"), DUI_T("system_13"));
-                pChoice->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-                pChoice->SetAttribute(DUI_T("height"), DUI_T("28"));
-                pChoice->SetAttribute(DUI_T("margin"), DUI_T("0,0,6,0"));
-                pChoice->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+                pChoice->SetText(U8String(kLabels[i]));
+                pChoice->SetAttribute("font", "system_13");
+                pChoice->SetAttribute("width", "stretch");
+                pChoice->SetAttribute("height", "28");
+                pChoice->SetAttribute("margin", "0,0,6,0");
+                pChoice->SetAttribute("cursor_type", "hand");
                 const bool active = m_settings.appearance == kValues[i];
                 pChoice->SetStateColor(ui::kControlStateNormal,
                                        active ? g_pal.accent : g_pal.chipBg);
                 pChoice->SetStateColor(ui::kControlStateHot, g_pal.chipHot);
                 pChoice->SetStateTextColor(ui::kControlStateNormal,
-                                           active ? DUI_T("#FFFFFFFF") : g_pal.textBody);
+                                           active ? "#FFFFFFFF" : g_pal.textBody);
                 SetRadius(pChoice, 6, true);
                 const std::string value = kValues[i];
                 pChoice->AttachClick([this, value](const ui::EventArgs&) {
@@ -1800,7 +1800,7 @@ void PolluxOSForm::ShowControlCentre(int x, int y)
         }
 
         // --- wallpaper ----------------------------------------------------
-        AddPopoverSection(this, pPanel, DUI_T("壁纸"));
+        AddPopoverSection(this, pPanel, "壁纸");
         h += 1 + 8 + 4 + 20;
         {
             struct Wallpaper { const char* name; const char* colour; };
@@ -1809,10 +1809,10 @@ void PolluxOSForm::ShowControlCentre(int x, int y)
                 { "dark",   "#1F2233" }, { "green",  "#35A87A" },
             };
             ui::HBox* pRow = new ui::HBox(this);
-            pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-            pRow->SetAttribute(DUI_T("height"), DUI_T("24"));
+            pRow->SetAttribute("width", "stretch");
+            pRow->SetAttribute("height", "24");
             for (const Wallpaper& w : kWallpapers) {
-                ui::Button* pSwatch = MakeSwatch(this, DUI_T(w.colour),
+                ui::Button* pSwatch = MakeSwatch(this, w.colour,
                                                  m_settings.wallpaper == w.name);
                 const std::string name = w.name;
                 pSwatch->AttachClick([this, name](const ui::EventArgs&) {
@@ -1829,24 +1829,24 @@ void PolluxOSForm::ShowControlCentre(int x, int y)
         }
 
         // --- sound --------------------------------------------------------
-        AddPopoverSection(this, pPanel, DUI_T("声音"));
+        AddPopoverSection(this, pPanel, "声音");
         h += 1 + 8 + 4 + 20;
         {
             int percent = ReadVolumePercent();
             if (percent < 0) {
-                AddPopoverText(this, pPanel, DUI_T("没有可用的混音器"), g_pal.textHint,
-                               DUI_T("system_13"));
+                AddPopoverText(this, pPanel, "没有可用的混音器", g_pal.textHint,
+                               "system_13");
             } else {
                 ui::Slider* pSlider = new ui::Slider(this);
-                pSlider->SetClass(DUI_T("slider_horizontal_green"));
-                pSlider->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-                pSlider->SetAttribute(DUI_T("height"), DUI_T("26"));
-                pSlider->SetAttribute(DUI_T("thumb_size"), DUI_T("16,16"));
-                pSlider->SetAttribute(DUI_T("progress_color"), g_pal.accent);
+                pSlider->SetClass("slider_horizontal_green");
+                pSlider->SetAttribute("width", "stretch");
+                pSlider->SetAttribute("height", "26");
+                pSlider->SetAttribute("thumb_size", "16,16");
+                pSlider->SetAttribute("progress_color", g_pal.accent);
                 pSlider->SetMinValue(0);
                 pSlider->SetMaxValue(100);
                 pSlider->SetValue(percent);
-                pSlider->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+                pSlider->SetAttribute("cursor_type", "hand");
                 pSlider->AttachValueChanged([](const ui::EventArgs& args) {
                     int value = static_cast<int>(args.wParam);
                     if (value < 0) value = 0;
@@ -1860,36 +1860,36 @@ void PolluxOSForm::ShowControlCentre(int x, int y)
         }
 
         // --- status -------------------------------------------------------
-        AddPopoverSection(this, pPanel, DUI_T("状态"));
+        AddPopoverSection(this, pPanel, "状态");
         h += 1 + 8 + 4 + 20;
         {
             const std::string ssid = CurrentSsid();
             AddPopoverText(this, pPanel,
-                           DString(DUI_T("Wi-Fi  ")) +
-                               (ssid.empty() ? DString(DUI_T("未连接")) : DString(ssid.c_str())),
-                           g_pal.textBody, DUI_T("system_13"));
+                           U8String("Wi-Fi  ") +
+                               (ssid.empty() ? U8String("未连接") : U8String(ssid.c_str())),
+                           g_pal.textBody, "system_13");
             h += kPopoverRowH;
 
             const std::string life = pollux::Trim(pollux::Run("sysctl -n hw.acpi.battery.life 2>/dev/null"));
             AddPopoverText(this, pPanel,
-                           DString(DUI_T("电池  ")) +
-                               (life.empty() ? DString(DUI_T("无")) : DString(life.c_str()) + DUI_T("%")) +
-                               (AcOnline() ? DUI_T("  已接通电源") : DUI_T("  使用电池")),
-                           g_pal.textBody, DUI_T("system_13"));
+                           U8String("电池  ") +
+                               (life.empty() ? U8String("无") : U8String(life.c_str()) + "%") +
+                               (AcOnline() ? "  已接通电源" : "  使用电池"),
+                           g_pal.textBody, "system_13");
             h += kPopoverRowH;
         }
 
         // --- footer -------------------------------------------------------
         ui::Button* pOpen = new ui::Button(this);
-        pOpen->SetText(DUI_T("打开系统设置…"));
-        pOpen->SetAttribute(DUI_T("font"), DUI_T("system_13"));
-        pOpen->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pOpen->SetAttribute(DUI_T("height"), DUI_T("30"));
-        pOpen->SetAttribute(DUI_T("margin"), DUI_T("0,10,0,0"));
-        pOpen->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pOpen->SetText("打开系统设置…");
+        pOpen->SetAttribute("font", "system_13");
+        pOpen->SetAttribute("width", "stretch");
+        pOpen->SetAttribute("height", "30");
+        pOpen->SetAttribute("margin", "0,10,0,0");
+        pOpen->SetAttribute("cursor_type", "hand");
         pOpen->SetStateColor(ui::kControlStateNormal, g_pal.accent);
         pOpen->SetStateColor(ui::kControlStateHot, g_pal.accent);
-        pOpen->SetStateTextColor(ui::kControlStateNormal, DUI_T("#FFFFFFFF"));
+        pOpen->SetStateTextColor(ui::kControlStateNormal, "#FFFFFFFF");
         SetRadius(pOpen, 7, true);
         pOpen->AttachClick([this](const ui::EventArgs&) {
             HideMenuPanel();
@@ -1923,19 +1923,19 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
     // the dock and the bottom of the screen: centring the bar in a taller row
     // left slack above and below it, which is the space the dock was asked to
     // sit lower into.
-    pDockRow->SetAttribute(DUI_T("height"), Num(barHeight));
-    pDockRow->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
-    pDockRow->SetAttribute(DUI_T("margin"), DUI_T("0,0,0,10"));
+    pDockRow->SetAttribute("height", Num(barHeight));
+    pDockRow->SetAttribute("child_align", "hcenter,vcenter");
+    pDockRow->SetAttribute("margin", "0,0,0,10");
     pRoot->AddItem(pDockRow);
 
     ui::HBox* pDock = new ui::HBox(this);
-    pDock->SetAttribute(DUI_T("height"), Num(barHeight));
-    pDock->SetAttribute(DUI_T("width"), DUI_T("auto"));
-    pDock->SetAttribute(DUI_T("padding"), DUI_T("6,6,6,6"));
-    pDock->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
+    pDock->SetAttribute("height", Num(barHeight));
+    pDock->SetAttribute("width", "auto");
+    pDock->SetAttribute("padding", "6,6,6,6");
+    pDock->SetAttribute("child_align", "hcenter,vcenter");
     pDock->SetBkColor(g_pal.dockBg);
     pDock->SetBorderColor(g_pal.dockBorder);
-    pDock->SetAttribute(DUI_T("border_size"), DUI_T("1"));
+    pDock->SetAttribute("border_size", "1");
     SetRadius(pDock, barRadius, false);
     pDockRow->AddItem(pDock);
 
@@ -1950,10 +1950,10 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
     // windows and the trash -- which is what gives the Dock its three groups.
     auto AddDockDivider = [this, pDock, iconPx, iconGap]() {
         ui::Control* pDivider = new ui::Control(this);
-        pDivider->SetAttribute(DUI_T("width"), DUI_T("1"));
-        pDivider->SetAttribute(DUI_T("height"), Num(iconPx * 62 / 100));
-        pDivider->SetAttribute(DUI_T("margin"),
-            ui::StringUtil::Printf(DUI_T("%d,0,%d,0"), iconGap + 3, iconGap + 3));
+        pDivider->SetAttribute("width", "1");
+        pDivider->SetAttribute("height", Num(iconPx * 62 / 100));
+        pDivider->SetAttribute("margin",
+            ui::StringUtil::Printf("%d,0,%d,0", iconGap + 3, iconGap + 3));
         pDivider->SetBkColor(g_pal.dockSeparator);
         pDivider->SetMouseEnabled(false);
         pDock->AddItem(pDivider);
@@ -1972,29 +1972,29 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
 
         // One icon tile per app; the label is a tooltip, macOS style.
         ui::Button* pIcon = new ui::Button(this);
-        pIcon->SetText(DString(kDockApps[i].glyph));
+        pIcon->SetText(U8String(kDockApps[i].glyph));
         if (kDockApps[i].icon != nullptr) {
-            pIcon->SetText(DUI_T(""));
-            pIcon->SetBkImage(DString(DUI_T("file='")) + kDockApps[i].icon +
-                              DUI_T("' width='") + Num(svgSize) + DUI_T("' height='") +
-                              Num(svgSize) + DUI_T("' halign='center' valign='center'"));
+            pIcon->SetText("");
+            pIcon->SetBkImage(U8String("file='") + kDockApps[i].icon +
+                              "' width='" + Num(svgSize) + "' height='" +
+                              Num(svgSize) + "' halign='center' valign='center'");
         }
-        pIcon->SetAttribute(DUI_T("font"), DUI_T("system_bold_22"));
-        pIcon->SetStateTextColor(ui::kControlStateNormal, DUI_T("#FFFFFFFF"));
-        pIcon->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
-        pIcon->SetAttribute(DUI_T("height"), Num(iconPx));
-        pIcon->SetAttribute(DUI_T("width"), Num(iconPx));
+        pIcon->SetAttribute("font", "system_bold_22");
+        pIcon->SetStateTextColor(ui::kControlStateNormal, "#FFFFFFFF");
+        pIcon->SetAttribute("text_align", "hcenter,vcenter");
+        pIcon->SetAttribute("height", Num(iconPx));
+        pIcon->SetAttribute("width", Num(iconPx));
         // The wrapper handles the spacing; the tile centres itself in it,
         // since a VBox only centres children that carry their own halign.
-        pIcon->SetAttribute(DUI_T("halign"), DUI_T("center"));
-        pIcon->SetBkColor(DString(kDockApps[i].color));
-        pIcon->SetBkColor2(DString(kDockApps[i].color2));
-        pIcon->SetBkColor2Direction(DUI_T("1"));   // left -> right gradient
+        pIcon->SetAttribute("halign", "center");
+        pIcon->SetBkColor(U8String(kDockApps[i].color));
+        pIcon->SetBkColor2(U8String(kDockApps[i].color2));
+        pIcon->SetBkColor2Direction("1");   // left -> right gradient
         SetRadius(pIcon, iconRadius, true);
-        pIcon->SetBorderColor(ui::kControlStateNormal, DString(kDockApps[i].color2));
+        pIcon->SetBorderColor(ui::kControlStateNormal, U8String(kDockApps[i].color2));
         pIcon->SetBorderColor(ui::kControlStateHot, g_pal.accent);
-        pIcon->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-        pIcon->SetToolTipText(DString(kDockApps[i].label));
+        pIcon->SetAttribute("cursor_type", "hand");
+        pIcon->SetToolTipText(U8String(kDockApps[i].label));
         pIcon->AttachClick([this, i](const ui::EventArgs& /*args*/) {
             HideMenuPanel();
             if (kDockApps[i].cmd[0] == '\0') {
@@ -2028,18 +2028,18 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
         });
 
         ui::VBox* pItem = new ui::VBox(this);
-        pItem->SetAttribute(DUI_T("width"), Num(iconPx));
-        pItem->SetAttribute(DUI_T("height"), Num(iconPx + dotLaneH));
-        pItem->SetAttribute(DUI_T("margin"), MarginH(iconGap));
+        pItem->SetAttribute("width", Num(iconPx));
+        pItem->SetAttribute("height", Num(iconPx + dotLaneH));
+        pItem->SetAttribute("margin", MarginH(iconGap));
 
         pItem->AddItem(pIcon);
 
         ui::Control* pDot = new ui::Control(this);
-        pDot->SetAttribute(DUI_T("width"), Num(dotSize));
-        pDot->SetAttribute(DUI_T("height"), Num(dotSize));
-        pDot->SetAttribute(DUI_T("halign"), DUI_T("center"));
-        pDot->SetAttribute(DUI_T("margin"),
-            ui::StringUtil::Printf(DUI_T("0,%d,0,0"), std::max(1, dotLaneH - dotSize - 2)));
+        pDot->SetAttribute("width", Num(dotSize));
+        pDot->SetAttribute("height", Num(dotSize));
+        pDot->SetAttribute("halign", "center");
+        pDot->SetAttribute("margin",
+            ui::StringUtil::Printf("0,%d,0,0", std::max(1, dotLaneH - dotSize - 2)));
         pDot->SetBkColor(g_pal.transparent);
         pDot->SetMouseEnabled(false);
         SetRadius(pDot, dotSize / 2, false);
@@ -2074,24 +2074,24 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
             const char* iconPath = look != nullptr
                                        ? look->icon
                                        : "polluxdesk/icons/app-generic.svg";
-            const DString colour(look != nullptr ? look->color : "#FF8E9AA6");
-            const DString colour2(look != nullptr ? look->color2 : "#FF6B7580");
+            const U8String colour(look != nullptr ? look->color : "#FF8E9AA6");
+            const U8String colour2(look != nullptr ? look->color2 : "#FF6B7580");
 
             ui::Button* pIcon = new ui::Button(this);
-            pIcon->SetBkImage(DString(DUI_T("file='")) + DString(iconPath) +
-                              DUI_T("' width='") + Num(svgSize) + DUI_T("' height='") +
-                              Num(svgSize) + DUI_T("' halign='center' valign='center'"));
-            pIcon->SetAttribute(DUI_T("height"), Num(iconPx));
-            pIcon->SetAttribute(DUI_T("width"), Num(iconPx));
-            pIcon->SetAttribute(DUI_T("halign"), DUI_T("center"));
+            pIcon->SetBkImage(U8String("file='") + U8String(iconPath) +
+                              "' width='" + Num(svgSize) + "' height='" +
+                              Num(svgSize) + "' halign='center' valign='center'");
+            pIcon->SetAttribute("height", Num(iconPx));
+            pIcon->SetAttribute("width", Num(iconPx));
+            pIcon->SetAttribute("halign", "center");
             pIcon->SetBkColor(colour);
             pIcon->SetBkColor2(colour2);
-            pIcon->SetBkColor2Direction(DUI_T("1"));
+            pIcon->SetBkColor2Direction("1");
             SetRadius(pIcon, iconRadius, true);
             pIcon->SetBorderColor(ui::kControlStateNormal, colour2);
             pIcon->SetBorderColor(ui::kControlStateHot, g_pal.accent);
-            pIcon->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
-            pIcon->SetToolTipText(DString(info.title.c_str()));
+            pIcon->SetAttribute("cursor_type", "hand");
+            pIcon->SetToolTipText(U8String(info.title.c_str()));
 
             const unsigned long id = info.id;
             pIcon->AttachClick([this, id](const ui::EventArgs& /*args*/) {
@@ -2100,7 +2100,7 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
                 // the title is the only thing the compositor listens to, and
                 // its one id-addressed command raises and focuses.
                 SetText(ui::StringUtil::Printf(
-                    DUI_T("PolluxOS Desktop (restore:%lu)"), id));
+                    "PolluxOS Desktop (restore:%lu)", id));
                 m_titleMarkerPending = true;
                 return true;
             });
@@ -2115,17 +2115,17 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
             // kinds of tile sit at the same height; the dot is lit, since a
             // tile that exists at all means the program is running.
             ui::VBox* pItem = new ui::VBox(this);
-            pItem->SetAttribute(DUI_T("width"), Num(iconPx));
-            pItem->SetAttribute(DUI_T("height"), Num(iconPx + dotLaneH));
-            pItem->SetAttribute(DUI_T("margin"), MarginH(iconGap));
+            pItem->SetAttribute("width", Num(iconPx));
+            pItem->SetAttribute("height", Num(iconPx + dotLaneH));
+            pItem->SetAttribute("margin", MarginH(iconGap));
             pItem->AddItem(pIcon);
 
             ui::Control* pDot = new ui::Control(this);
-            pDot->SetAttribute(DUI_T("width"), Num(dotSize));
-            pDot->SetAttribute(DUI_T("height"), Num(dotSize));
-            pDot->SetAttribute(DUI_T("halign"), DUI_T("center"));
-            pDot->SetAttribute(DUI_T("margin"),
-                ui::StringUtil::Printf(DUI_T("0,%d,0,0"), std::max(1, dotLaneH - dotSize - 2)));
+            pDot->SetAttribute("width", Num(dotSize));
+            pDot->SetAttribute("height", Num(dotSize));
+            pDot->SetAttribute("halign", "center");
+            pDot->SetAttribute("margin",
+                ui::StringUtil::Printf("0,%d,0,0", std::max(1, dotLaneH - dotSize - 2)));
             pDot->SetBkColor(g_pal.dockDot);
             pDot->SetMouseEnabled(false);
             SetRadius(pDot, dotSize / 2, false);
@@ -2158,37 +2158,37 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
             continue;
         }
         ui::Button* pChip = new ui::Button(this);
-        pChip->SetAttribute(DUI_T("width"), Num(chipW));
-        pChip->SetAttribute(DUI_T("height"), Num(chipH));
-        pChip->SetAttribute(DUI_T("margin"), MarginH(iconGap / 2));
+        pChip->SetAttribute("width", Num(chipW));
+        pChip->SetAttribute("height", Num(chipH));
+        pChip->SetAttribute("margin", MarginH(iconGap / 2));
         // The dock centres a child by its own valign, not by the bar's
         // child_align (that one only covers the horizontal axis in HLayout).
         // Without this the chip sits against the top edge of the dock.
-        pChip->SetAttribute(DUI_T("valign"), DUI_T("center"));
-        pChip->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        pChip->SetAttribute("valign", "center");
+        pChip->SetAttribute("font", "system_12");
         pChip->SetStateTextColor(ui::kControlStateNormal, g_pal.textBody);
-        pChip->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
-        pChip->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pChip->SetAttribute("text_align", "hcenter,vcenter");
+        pChip->SetAttribute("cursor_type", "hand");
         pChip->SetBkColor(g_pal.chipBg);
         pChip->SetBorderColor(ui::kControlStateNormal, g_pal.chipBorder);
         pChip->SetBorderColor(ui::kControlStateHot, g_pal.accent);
-        pChip->SetAttribute(DUI_T("border_size"), DUI_T("1"));
+        pChip->SetAttribute("border_size", "1");
         SetRadius(pChip, std::max(4, iconPx / 8), true);
-        pChip->SetToolTipText(DString(info.title.c_str()));
+        pChip->SetToolTipText(U8String(info.title.c_str()));
 
         const std::string shot = pollux::ThumbPath(info.id);
         if (pollux::FileExists(shot)) {
             // A picture of the window, taken while the compositor was still
             // holding it on screen. Scaled to the chip, which keeps the
             // window's proportions because grim grabbed its real rectangle.
-            DString spec = DString(DUI_T("file='")) + DString(shot.c_str()) +
-                DUI_T("' width='") + Num(chipW - 4) + DUI_T("' height='") +
-                Num(chipH - 4) + DUI_T("' halign='center' valign='center'");
+            U8String spec = U8String("file='") + U8String(shot.c_str()) +
+                "' width='" + Num(chipW - 4) + "' height='" +
+                Num(chipH - 4) + "' halign='center' valign='center'";
             pChip->SetBkImage(spec);
         } else {
             // No picture (the grab failed, or did not happen): the title is
             // still worth showing, and dui ellipsizes it if it does not fit.
-            pChip->SetText(DString(info.title.c_str()));
+            pChip->SetText(U8String(info.title.c_str()));
         }
 
         const size_t index = m_minimizedIds.size();
@@ -2201,7 +2201,7 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
                 // cleared on the next tick so the two title changes cannot
                 // coalesce into one commit.
                 SetText(ui::StringUtil::Printf(
-                    DUI_T("PolluxOS Desktop (restore:%lu)"), m_minimizedIds[index]));
+                    "PolluxOS Desktop (restore:%lu)", m_minimizedIds[index]));
                 m_titleMarkerPending = true;
             }
             return true;
@@ -2211,7 +2211,7 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
     }
 
     ui::ButtonVBox* pTrash = MakeTrashTile(this, iconPx);
-    pTrash->SetAttribute(DUI_T("margin"), MarginH(iconGap));
+    pTrash->SetAttribute("margin", MarginH(iconGap));
     pTrash->AttachClick([this](const ui::EventArgs& /*args*/) {
         HideMenuPanel();
         // The trash is an ordinary directory; the browser is simply pointed
@@ -2248,7 +2248,7 @@ void PolluxOSForm::UpdateClock()
         // A tick after the request, so the compositor is certain to have seen
         // it as its own title change.
         m_titleMarkerPending = false;
-        SetText(DUI_T("PolluxOS Desktop"));
+        SetText("PolluxOS Desktop");
     }
 
     GrabPendingThumbnail();
@@ -2285,8 +2285,8 @@ void PolluxOSForm::UpdateClock()
         while (!life.empty() && (life.back() == '\n' || life.back() == ' ')) {
             life.pop_back();
         }
-        const DString text = life.empty() ? DString(DUI_T("--%"))
-                                          : DString(life.c_str()) + DUI_T("%");
+        const U8String text = life.empty() ? U8String("--%")
+                                          : U8String(life.c_str()) + "%";
         if (m_pBatteryLabel->GetText() != text) {
             m_pBatteryLabel->SetText(text);
         }
@@ -2295,15 +2295,15 @@ void PolluxOSForm::UpdateClock()
     // The menu-bar clock shows minutes: skip SetText when the string did not
     // change, otherwise the timer invalidates the shell every second even
     // though the rendered text is identical.
-    if (m_pClockLabel != nullptr && m_pClockLabel->GetText() != DString(menuTimeBuf)) {
-        m_pClockLabel->SetText(DString(menuTimeBuf));
+    if (m_pClockLabel != nullptr && m_pClockLabel->GetText() != U8String(menuTimeBuf)) {
+        m_pClockLabel->SetText(U8String(menuTimeBuf));
     }
 
     char desktopTimeBuf[32];
     std::snprintf(desktopTimeBuf, sizeof(desktopTimeBuf), "%02d:%02d:%02d",
                   tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec);
     if (m_pDesktopClockLabel != nullptr) {
-        m_pDesktopClockLabel->SetText(DString(desktopTimeBuf));
+        m_pDesktopClockLabel->SetText(U8String(desktopTimeBuf));
     }
 
     char desktopDateBuf[80];
@@ -2311,6 +2311,6 @@ void PolluxOSForm::UpdateClock()
                   tm_now.tm_year + 1900, tm_now.tm_mon + 1, tm_now.tm_mday,
                   weekdays[tm_now.tm_wday]);
     if (m_pDesktopDateLabel != nullptr) {
-        m_pDesktopDateLabel->SetText(DString(desktopDateBuf));
+        m_pDesktopDateLabel->SetText(U8String(desktopDateBuf));
     }
 }

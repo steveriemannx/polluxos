@@ -27,8 +27,8 @@ public:
      *  @param scale   the value that fills the full height */
     void SetSamples(const std::vector<float>& values, float scale);
 
-    void SetColours(const DString& line, const DString& fillTop,
-                    const DString& fillBottom, const DString& grid);
+    void SetColours(const U8String& line, const U8String& fillTop,
+                    const U8String& fillBottom, const U8String& grid);
 
     /** Highest sample currently drawn, in the same unit as the scale. */
     float Peak() const { return m_peak; }
@@ -51,7 +51,7 @@ public:
 
     /** @param fraction 0..1; values outside are clamped. */
     void SetFraction(float fraction);
-    void SetColours(const DString& track, const DString& fill);
+    void SetColours(const U8String& track, const U8String& fill);
 
     virtual void Paint(ui::IRender* pRender, const ui::UiRect& rcPaint) override;
 

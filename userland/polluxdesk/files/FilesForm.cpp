@@ -14,19 +14,19 @@
 namespace {
 
 // macOS Big Sur / Sonoma light palette (matches the PolluxOS shell).
-const DString kBarBg        = DUI_T("#F2FFFFFF");
-const DString kBarBorder    = DUI_T("#33000000");
-const DString kTransparent  = DUI_T("#00000000");
-const DString kSidebarBg    = DUI_T("#E8F2F3F7");
-const DString kListBg       = DUI_T("#F9FFFFFF");
-const DString kRowSelected  = DUI_T("#330A84FF");
-const DString kTextDark     = DUI_T("#FF1D1D1F");
-const DString kTextBody     = DUI_T("#FF3A3A3C");
-const DString kTextHint     = DUI_T("#FF8E8E93");
-const DString kTextOnAccent = DUI_T("#FFFFFFFF");
-const DString kAccent       = DUI_T("#FF0A84FF");
-const DString kHairline     = DUI_T("#22000000");
-const DString kFolderColor   = DUI_T("#FF4C9FDB");
+const U8String kBarBg        = "#F2FFFFFF";
+const U8String kBarBorder    = "#33000000";
+const U8String kTransparent  = "#00000000";
+const U8String kSidebarBg    = "#E8F2F3F7";
+const U8String kListBg       = "#F9FFFFFF";
+const U8String kRowSelected  = "#330A84FF";
+const U8String kTextDark     = "#FF1D1D1F";
+const U8String kTextBody     = "#FF3A3A3C";
+const U8String kTextHint     = "#FF8E8E93";
+const U8String kTextOnAccent = "#FFFFFFFF";
+const U8String kAccent       = "#FF0A84FF";
+const U8String kHairline     = "#22000000";
+const U8String kFolderColor   = "#FF4C9FDB";
 
 // Hover, deliberately unused.
 //
@@ -59,7 +59,7 @@ const int kArrowW     = 46;   // back / forward / up: a wider target than a word
 // set. Painting all four the same makes the control look the same however it
 // is left: what it should look like is then the app's decision, taken when the
 // selection changes, and nothing else can repaint it a different colour.
-void SetAllStateColors(ui::Control* pControl, const DString& colour)
+void SetAllStateColors(ui::Control* pControl, const U8String& colour)
 {
     pControl->SetStateColor(ui::kControlStateNormal, colour);
     pControl->SetStateColor(ui::kControlStateHot, colour);
@@ -67,7 +67,7 @@ void SetAllStateColors(ui::Control* pControl, const DString& colour)
     pControl->SetStateColor(ui::kControlStateDisabled, colour);
 }
 
-DString FormatSize(long long bytes)
+U8String FormatSize(long long bytes)
 {
     char buf[64];
     if (bytes >= 1024LL * 1024LL * 1024LL) {
@@ -81,13 +81,13 @@ DString FormatSize(long long bytes)
     } else {
         std::snprintf(buf, sizeof(buf), "%lld B", bytes);
     }
-    return DString(buf);
+    return U8String(buf);
 }
 
 // Extensions opened in a terminal text editor; everything else also falls
 // back to the editor (there is no MIME handler database on this minimal
 // system yet), except executables which are run directly.
-bool IsTextExtension(const DString& name)
+bool IsTextExtension(const U8String& name)
 {
     const char* exts[] = { ".txt", ".md", ".c", ".cpp", ".h", ".hpp", ".cc",
                            ".py", ".sh", ".conf", ".ini", ".log", ".xml",
@@ -113,13 +113,13 @@ void SetRadius(ui::Control* pControl, int radius, bool interactive)
         pControl->SetStateColorRound(ui::kControlStateHot, size, false);
         pControl->SetStateColorRound(ui::kControlStatePushed, size, false);
     }
-    pControl->SetAttribute(DUI_T("border_round"),
-        ui::StringUtil::Printf(DUI_T("%d,%d"), radius, radius));
+    pControl->SetAttribute("border_round",
+        ui::StringUtil::Printf("%d,%d", radius, radius));
 }
 
-DString Num(int value)
+U8String Num(int value)
 {
-    return ui::StringUtil::Printf(DUI_T("%d"), value);
+    return ui::StringUtil::Printf("%d", value);
 }
 
 // Make a scroll pane re-measure itself after its contents have changed.
@@ -153,8 +153,8 @@ void SyncScrollRange(ui::VScrollBox* pBox)
 ui::Control* MakeHairline(ui::Window* pWindow, bool vertical)
 {
     ui::Control* pLine = new ui::Control(pWindow);
-    pLine->SetAttribute(DUI_T("width"), vertical ? DUI_T("1") : DUI_T("stretch"));
-    pLine->SetAttribute(DUI_T("height"), vertical ? DUI_T("stretch") : DUI_T("1"));
+    pLine->SetAttribute("width", vertical ? "1" : "stretch");
+    pLine->SetAttribute("height", vertical ? "stretch" : "1");
     pLine->SetBkColor(kHairline);
     pLine->SetMouseEnabled(false);
     return pLine;
@@ -165,24 +165,24 @@ ui::Control* MakeHairline(ui::Window* pWindow, bool vertical)
 ui::VBox* MakeFolderIcon(ui::Window* pWindow, int size)
 {
     ui::VBox* pIcon = new ui::VBox(pWindow);
-    pIcon->SetAttribute(DUI_T("width"), Num(size * 13 / 10));
-    pIcon->SetAttribute(DUI_T("height"), Num(size));
+    pIcon->SetAttribute("width", Num(size * 13 / 10));
+    pIcon->SetAttribute("height", Num(size));
     // An HBox aligns a child vertically by the child's own valign -- the bar's
     // child_align only reaches the horizontal axis -- so the glyph has to ask
     // for its own centring, or it rides at the top of the cell.
-    pIcon->SetAttribute(DUI_T("valign"), DUI_T("center"));
+    pIcon->SetAttribute("valign", "center");
     pIcon->SetBkColor(kFolderColor);
-    pIcon->SetBkColor2(DUI_T("#FF3E8ECA"));
-    pIcon->SetBkColor2Direction(DUI_T("1"));
+    pIcon->SetBkColor2("#FF3E8ECA");
+    pIcon->SetBkColor2Direction("1");
     SetRadius(pIcon, std::max(3, size / 5), false);
     pIcon->SetMouseEnabled(false);
 
     ui::Control* pTab = new ui::Control(pWindow);
-    pTab->SetAttribute(DUI_T("width"), Num(size * 3 / 5));
-    pTab->SetAttribute(DUI_T("height"), Num(size / 5));
-    pTab->SetAttribute(DUI_T("margin"), DUI_T("-1,-2,0,0"));
-    pTab->SetAttribute(DUI_T("halign"), DUI_T("left"));
-    pTab->SetBkColor(DUI_T("#FF2F7AB8"));
+    pTab->SetAttribute("width", Num(size * 3 / 5));
+    pTab->SetAttribute("height", Num(size / 5));
+    pTab->SetAttribute("margin", "-1,-2,0,0");
+    pTab->SetAttribute("halign", "left");
+    pTab->SetBkColor("#FF2F7AB8");
     pTab->SetMouseEnabled(false);
     pIcon->AddItem(pTab);
     return pIcon;
@@ -191,28 +191,28 @@ ui::VBox* MakeFolderIcon(ui::Window* pWindow, int size)
 ui::VBox* MakeFileIcon(ui::Window* pWindow, int size)
 {
     ui::VBox* pIcon = new ui::VBox(pWindow);
-    pIcon->SetAttribute(DUI_T("width"), Num(size * 9 / 10));
-    pIcon->SetAttribute(DUI_T("height"), Num(size));
-    pIcon->SetAttribute(DUI_T("valign"), DUI_T("center"));   // see MakeFolderIcon
-    pIcon->SetBkColor(DUI_T("#FFFFFFFF"));
-    pIcon->SetBorderColor(DUI_T("#FFC9C9CE"));
-    pIcon->SetAttribute(DUI_T("border_size"), DUI_T("1"));
+    pIcon->SetAttribute("width", Num(size * 9 / 10));
+    pIcon->SetAttribute("height", Num(size));
+    pIcon->SetAttribute("valign", "center");   // see MakeFolderIcon
+    pIcon->SetBkColor("#FFFFFFFF");
+    pIcon->SetBorderColor("#FFC9C9CE");
+    pIcon->SetAttribute("border_size", "1");
     SetRadius(pIcon, std::max(2, size / 7), false);
-    pIcon->SetAttribute(DUI_T("child_align"), DUI_T("vcenter"));
+    pIcon->SetAttribute("child_align", "vcenter");
     pIcon->SetMouseEnabled(false);
     for (int i = 0; i < 3; ++i) {
         if (i > 0) {
             ui::Control* pGap = new ui::Control(pWindow);
-            pGap->SetAttribute(DUI_T("height"), DUI_T("2"));
+            pGap->SetAttribute("height", "2");
             pGap->SetMouseEnabled(false);
             pIcon->AddItem(pGap);
         }
         ui::Control* pLine = new ui::Control(pWindow);
-        pLine->SetAttribute(DUI_T("height"), DUI_T("1"));
-        pLine->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pLine->SetAttribute(DUI_T("margin"), DUI_T("2,0,2,0"));
-        pLine->SetAttribute(DUI_T("halign"), DUI_T("center"));
-        pLine->SetBkColor(DUI_T("#FFC7C7CC"));
+        pLine->SetAttribute("height", "1");
+        pLine->SetAttribute("width", "stretch");
+        pLine->SetAttribute("margin", "2,0,2,0");
+        pLine->SetAttribute("halign", "center");
+        pLine->SetBkColor("#FFC7C7CC");
         pLine->SetMouseEnabled(false);
         pIcon->AddItem(pLine);
     }
@@ -222,67 +222,67 @@ ui::VBox* MakeFileIcon(ui::Window* pWindow, int size)
 // Sidebar glyphs, drawn from boxes the way the row icons are: the embedded
 // font has no symbol set worth relying on, and a folder, a house, a can and a
 // disk are all recognisable at this size from two or three rectangles.
-ui::VBox* MakePlaceIcon(ui::Window* pWindow, const DString& kind)
+ui::VBox* MakePlaceIcon(ui::Window* pWindow, const U8String& kind)
 {
     ui::VBox* pIcon = new ui::VBox(pWindow);
-    pIcon->SetAttribute(DUI_T("width"), DUI_T("18"));
-    pIcon->SetAttribute(DUI_T("height"), DUI_T("16"));
-    pIcon->SetAttribute(DUI_T("valign"), DUI_T("center"));
+    pIcon->SetAttribute("width", "18");
+    pIcon->SetAttribute("height", "16");
+    pIcon->SetAttribute("valign", "center");
     pIcon->SetMouseEnabled(false);
 
-    if (kind == DUI_T("folder")) {
+    if (kind == "folder") {
         pIcon->SetBkColor(kFolderColor);
-        pIcon->SetBkColor2(DUI_T("#FF3E8ECA"));
-        pIcon->SetBkColor2Direction(DUI_T("1"));
-        pIcon->SetAttribute(DUI_T("height"), DUI_T("13"));
+        pIcon->SetBkColor2("#FF3E8ECA");
+        pIcon->SetBkColor2Direction("1");
+        pIcon->SetAttribute("height", "13");
         SetRadius(pIcon, 3, false);
         ui::Control* pTab = new ui::Control(pWindow);
-        pTab->SetAttribute(DUI_T("width"), DUI_T("8"));
-        pTab->SetAttribute(DUI_T("height"), DUI_T("3"));
-        pTab->SetAttribute(DUI_T("margin"), DUI_T("-1,-2,0,0"));
-        pTab->SetAttribute(DUI_T("halign"), DUI_T("left"));
-        pTab->SetBkColor(DUI_T("#FF2F7AB8"));
+        pTab->SetAttribute("width", "8");
+        pTab->SetAttribute("height", "3");
+        pTab->SetAttribute("margin", "-1,-2,0,0");
+        pTab->SetAttribute("halign", "left");
+        pTab->SetBkColor("#FF2F7AB8");
         pTab->SetMouseEnabled(false);
         pIcon->AddItem(pTab);
         return pIcon;
     }
 
-    if (kind == DUI_T("house")) {
+    if (kind == "house") {
         ui::Control* pRoof = new ui::Control(pWindow);
-        pRoof->SetAttribute(DUI_T("width"), DUI_T("18"));
-        pRoof->SetAttribute(DUI_T("height"), DUI_T("5"));
+        pRoof->SetAttribute("width", "18");
+        pRoof->SetAttribute("height", "5");
         pRoof->SetBkColor(kFolderColor);
         pRoof->SetMouseEnabled(false);
         SetRadius(pRoof, 2, false);
         pIcon->AddItem(pRoof);
 
         ui::Control* pBody = new ui::Control(pWindow);
-        pBody->SetAttribute(DUI_T("width"), DUI_T("14"));
-        pBody->SetAttribute(DUI_T("height"), DUI_T("9"));
-        pBody->SetAttribute(DUI_T("margin"), DUI_T("0,1,0,0"));
-        pBody->SetAttribute(DUI_T("halign"), DUI_T("center"));
-        pBody->SetBkColor(DUI_T("#FF3E8ECA"));
+        pBody->SetAttribute("width", "14");
+        pBody->SetAttribute("height", "9");
+        pBody->SetAttribute("margin", "0,1,0,0");
+        pBody->SetAttribute("halign", "center");
+        pBody->SetBkColor("#FF3E8ECA");
         pBody->SetMouseEnabled(false);
         SetRadius(pBody, 2, false);
         pIcon->AddItem(pBody);
         return pIcon;
     }
 
-    if (kind == DUI_T("trash")) {
+    if (kind == "trash") {
         ui::Control* pLid = new ui::Control(pWindow);
-        pLid->SetAttribute(DUI_T("width"), DUI_T("14"));
-        pLid->SetAttribute(DUI_T("height"), DUI_T("3"));
-        pLid->SetAttribute(DUI_T("halign"), DUI_T("center"));
+        pLid->SetAttribute("width", "14");
+        pLid->SetAttribute("height", "3");
+        pLid->SetAttribute("halign", "center");
         pLid->SetBkColor(kTextHint);
         pLid->SetMouseEnabled(false);
         SetRadius(pLid, 1, false);
         pIcon->AddItem(pLid);
 
         ui::Control* pBody = new ui::Control(pWindow);
-        pBody->SetAttribute(DUI_T("width"), DUI_T("11"));
-        pBody->SetAttribute(DUI_T("height"), DUI_T("11"));
-        pBody->SetAttribute(DUI_T("margin"), DUI_T("0,1,0,0"));
-        pBody->SetAttribute(DUI_T("halign"), DUI_T("center"));
+        pBody->SetAttribute("width", "11");
+        pBody->SetAttribute("height", "11");
+        pBody->SetAttribute("margin", "0,1,0,0");
+        pBody->SetAttribute("halign", "center");
         pBody->SetBkColor(kTextHint);
         pBody->SetMouseEnabled(false);
         SetRadius(pBody, 2, false);
@@ -292,13 +292,13 @@ ui::VBox* MakePlaceIcon(ui::Window* pWindow, const DString& kind)
 
     // filesystem: a drive
     pIcon->SetBkColor(kTextHint);
-    pIcon->SetAttribute(DUI_T("height"), DUI_T("12"));
+    pIcon->SetAttribute("height", "12");
     SetRadius(pIcon, 2, false);
     ui::Control* pSlot = new ui::Control(pWindow);
-    pSlot->SetAttribute(DUI_T("width"), DUI_T("14"));
-    pSlot->SetAttribute(DUI_T("height"), DUI_T("3"));
-    pSlot->SetAttribute(DUI_T("margin"), DUI_T("0,2,0,0"));
-    pSlot->SetAttribute(DUI_T("halign"), DUI_T("center"));
+    pSlot->SetAttribute("width", "14");
+    pSlot->SetAttribute("height", "3");
+    pSlot->SetAttribute("margin", "0,2,0,0");
+    pSlot->SetAttribute("halign", "center");
     pSlot->SetBkColor(kListBg);
     pSlot->SetMouseEnabled(false);
     pIcon->AddItem(pSlot);
@@ -306,18 +306,18 @@ ui::VBox* MakePlaceIcon(ui::Window* pWindow, const DString& kind)
 }
 
 // A flat toolbar button with a glyph, as the browser's own toolbar uses.
-ui::Button* MakeToolButton(ui::Window* pWindow, const DString& glyph,
-                           const DString& tip, int width,
-                           const DString& font = DUI_T("system_18"))
+ui::Button* MakeToolButton(ui::Window* pWindow, const U8String& glyph,
+                           const U8String& tip, int width,
+                           const U8String& font = "system_18")
 {
     ui::Button* pButton = new ui::Button(pWindow);
     pButton->SetText(glyph);
-    pButton->SetAttribute(DUI_T("font"), font);
-    pButton->SetAttribute(DUI_T("width"), Num(width));
-    pButton->SetAttribute(DUI_T("height"), Num(kToolH));
-    pButton->SetAttribute(DUI_T("margin"), DUI_T("0,0,4,0"));
-    pButton->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
-    pButton->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+    pButton->SetAttribute("font", font);
+    pButton->SetAttribute("width", Num(width));
+    pButton->SetAttribute("height", Num(kToolH));
+    pButton->SetAttribute("margin", "0,0,4,0");
+    pButton->SetAttribute("text_align", "hcenter,vcenter");
+    pButton->SetAttribute("cursor_type", "hand");
     // The pressed flash is the only state that shows, which is why it is the
     // one that keeps a colour.
     SetAllStateColors(pButton, kTransparent);
@@ -330,16 +330,16 @@ ui::Button* MakeToolButton(ui::Window* pWindow, const DString& glyph,
 }
 
 // One line of text in the status bar.
-ui::Label* MakeStatusText(ui::Window* pWindow, const DString& text,
-                          const DString& colour, const DString& align)
+ui::Label* MakeStatusText(ui::Window* pWindow, const U8String& text,
+                          const U8String& colour, const U8String& align)
 {
     ui::Label* pLabel = new ui::Label(pWindow);
     pLabel->SetText(text);
-    pLabel->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+    pLabel->SetAttribute("font", "system_12");
     pLabel->SetStateTextColor(ui::kControlStateNormal, colour);
-    pLabel->SetAttribute(DUI_T("text_align"), align);
-    pLabel->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-    pLabel->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pLabel->SetAttribute("text_align", align);
+    pLabel->SetAttribute("height", "stretch");
+    pLabel->SetAttribute("width", "stretch");
     pLabel->SetMouseEnabled(false);
     return pLabel;
 }
@@ -355,14 +355,14 @@ FilesForm::~FilesForm()
 {
 }
 
-DString FilesForm::GetSkinFolder()
+U8String FilesForm::GetSkinFolder()
 {
-    return DUI_T("polluxdesk");
+    return "polluxdesk";
 }
 
-DString FilesForm::GetSkinFile()
+U8String FilesForm::GetSkinFile()
 {
-    return DUI_T("files.xml");
+    return "files.xml";
 }
 
 void FilesForm::GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs)
@@ -391,7 +391,7 @@ void FilesForm::OnInitWindow()
     if (m_pFileList != nullptr) {
         ui::ScrollBar* pBar = m_pFileList->GetVScrollBar();
         if (pBar != nullptr) {
-            pBar->SetClass(DUI_T("vscrollbar"));
+            pBar->SetClass("vscrollbar");
             pBar->SetAutoHideScroll(false);
         }
     }
@@ -401,8 +401,8 @@ void FilesForm::OnInitWindow()
     // something has been thrown away.
     if (m_startDir.empty() || !Navigate(m_startDir)) {
         const char* home = std::getenv("HOME");
-        if (home == nullptr || !Navigate(DString(home))) {
-            Navigate(DUI_T("/"));
+        if (home == nullptr || !Navigate(U8String(home))) {
+            Navigate("/");
         }
     }
 
@@ -421,8 +421,8 @@ void FilesForm::BuildUi()
     ui::VBox* pRoot = new ui::VBox(this);
     pRoot->SetBkColor(kListBg);
     pRoot->SetBorderColor(kTransparent);
-    pRoot->SetAttribute(DUI_T("border_size"), DUI_T("0"));
-    pRoot->SetAttribute(DUI_T("padding"), DUI_T("0,0,0,0"));
+    pRoot->SetAttribute("border_size", "0");
+    pRoot->SetAttribute("padding", "0,0,0,0");
 
     BuildToolbar(pRoot);
     BuildBody(pRoot);
@@ -437,9 +437,9 @@ void FilesForm::BuildUi()
 void FilesForm::BuildToolbar(ui::VBox* pRoot)
 {
     ui::VBox* pToolbar = new ui::VBox(this);
-    pToolbar->SetAttribute(DUI_T("height"), DUI_T("auto"));
-    pToolbar->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    pToolbar->SetAttribute(DUI_T("padding"), DUI_T("10,8,10,8"));
+    pToolbar->SetAttribute("height", "auto");
+    pToolbar->SetAttribute("width", "stretch");
+    pToolbar->SetAttribute("padding", "10,8,10,8");
     pToolbar->SetBkColor(kBarBg);
 
     // Row one is the buttons. They get a row to themselves rather than
@@ -447,30 +447,30 @@ void FilesForm::BuildToolbar(ui::VBox* pRoot)
     // fixed ones lays out unpredictably, and whatever lost the width was
     // simply not drawn.
     ui::HBox* pRow = new ui::HBox(this);
-    pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    pRow->SetAttribute(DUI_T("height"), Num(kToolH));
+    pRow->SetAttribute("width", "stretch");
+    pRow->SetAttribute("height", Num(kToolH));
 
     // The three arrows get more room than the word buttons next to them: a
     // single glyph in a 34px square was a small target for the two controls
     // used most.
-    m_pBackButton = MakeToolButton(this, DUI_T("←"), DUI_T("后退"), kArrowW,
-                                  DUI_T("system_24"));
+    m_pBackButton = MakeToolButton(this, "←", "后退", kArrowW,
+                                  "system_24");
     m_pBackButton->AttachClick([this](const ui::EventArgs&) {
         NavigateBack();
         return true;
     });
     pRow->AddItem(m_pBackButton);
 
-    m_pForwardButton = MakeToolButton(this, DUI_T("→"), DUI_T("前进"), kArrowW,
-                                     DUI_T("system_24"));
+    m_pForwardButton = MakeToolButton(this, "→", "前进", kArrowW,
+                                     "system_24");
     m_pForwardButton->AttachClick([this](const ui::EventArgs&) {
         NavigateForward();
         return true;
     });
     pRow->AddItem(m_pForwardButton);
 
-    ui::Button* pUp = MakeToolButton(this, DUI_T("↑"), DUI_T("上一级"), kArrowW,
-                                      DUI_T("system_24"));
+    ui::Button* pUp = MakeToolButton(this, "↑", "上一级", kArrowW,
+                                      "system_24");
     pUp->AttachClick([this](const ui::EventArgs&) {
         NavigateUp();
         return true;
@@ -478,27 +478,27 @@ void FilesForm::BuildToolbar(ui::VBox* pRoot)
     pRow->AddItem(pUp);
 
     ui::Control* pSpacer = new ui::Control(this);
-    pSpacer->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    pSpacer->SetAttribute("width", "stretch");
     pSpacer->SetMouseEnabled(false);
     pRow->AddItem(pSpacer);
 
     // Text rather than symbols: the embedded font has the arrows but not most
     // of the geometric shapes, which come out as empty boxes.
-    ui::Button* pNewFolder = MakeToolButton(this, DUI_T("新建"), DUI_T("新建文件夹"), 52);
+    ui::Button* pNewFolder = MakeToolButton(this, "新建", "新建文件夹", 52);
     pNewFolder->AttachClick([this](const ui::EventArgs&) {
         NewFolder();
         return true;
     });
     pRow->AddItem(pNewFolder);
 
-    ui::Button* pView = MakeToolButton(this, DUI_T("视图"), DUI_T("切换列表 / 图标"), 52);
+    ui::Button* pView = MakeToolButton(this, "视图", "切换列表 / 图标", 52);
     pView->AttachClick([this](const ui::EventArgs&) {
         SetIconView(!m_iconView);
         return true;
     });
     pRow->AddItem(pView);
 
-    ui::Button* pRefresh = MakeToolButton(this, DUI_T("刷新"), DUI_T("刷新"), 52);
+    ui::Button* pRefresh = MakeToolButton(this, "刷新", "刷新", 52);
     pRefresh->AttachClick([this](const ui::EventArgs&) {
         Refresh();
         return true;
@@ -512,18 +512,18 @@ void FilesForm::BuildToolbar(ui::VBox* pRoot)
     // way into a directory would exist but never get a size. Navigation only
     // rewrites their text.
     m_pBreadcrumb = new ui::HBox(this);
-    m_pBreadcrumb->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    m_pBreadcrumb->SetAttribute(DUI_T("height"), DUI_T("28"));
-    m_pBreadcrumb->SetAttribute(DUI_T("margin"), DUI_T("0,6,0,0"));
+    m_pBreadcrumb->SetAttribute("width", "stretch");
+    m_pBreadcrumb->SetAttribute("height", "28");
+    m_pBreadcrumb->SetAttribute("margin", "0,6,0,0");
     for (int i = 0; i < kCrumbSlots; ++i) {
         if (i > 0) {
             ui::Label* pSep = new ui::Label(this);
-            pSep->SetText(DUI_T("›"));
-            pSep->SetAttribute(DUI_T("font"), DUI_T("system_13"));
+            pSep->SetText("›");
+            pSep->SetAttribute("font", "system_13");
             pSep->SetStateTextColor(ui::kControlStateNormal, kTextHint);
-            pSep->SetAttribute(DUI_T("width"), DUI_T("14"));
-            pSep->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-            pSep->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
+            pSep->SetAttribute("width", "14");
+            pSep->SetAttribute("height", "stretch");
+            pSep->SetAttribute("text_align", "hcenter,vcenter");
             pSep->SetMouseEnabled(false);
             m_pBreadcrumb->AddItem(pSep);
             // Kept so a shorter path can take the separator with it; a trail
@@ -532,12 +532,12 @@ void FilesForm::BuildToolbar(ui::VBox* pRoot)
             m_pCrumbSeps.push_back(pSep);
         }
         ui::Button* pCrumb = new ui::Button(this);
-        pCrumb->SetAttribute(DUI_T("font"), DUI_T("system_13"));
-        pCrumb->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vcenter"));
-        pCrumb->SetAttribute(DUI_T("text_padding"), DUI_T("4,0,4,0"));
-        pCrumb->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-        pCrumb->SetAttribute(DUI_T("width"), Num(kCrumbW));
-        pCrumb->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pCrumb->SetAttribute("font", "system_13");
+        pCrumb->SetAttribute("text_align", "hcenter,vcenter");
+        pCrumb->SetAttribute("text_padding", "4,0,4,0");
+        pCrumb->SetAttribute("height", "stretch");
+        pCrumb->SetAttribute("width", Num(kCrumbW));
+        pCrumb->SetAttribute("cursor_type", "hand");
         // The crumb is a word in a path, not a button: no hover box, and
         // nothing left behind by a click either.
         SetAllStateColors(pCrumb, kTransparent);
@@ -561,8 +561,8 @@ void FilesForm::BuildToolbar(ui::VBox* pRoot)
 void FilesForm::BuildBody(ui::VBox* pRoot)
 {
     ui::HBox* pBody = new ui::HBox(this);
-    pBody->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    pBody->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+    pBody->SetAttribute("width", "stretch");
+    pBody->SetAttribute("height", "stretch");
     BuildSidebar(pBody);
     pBody->AddItem(MakeHairline(this, true));
     BuildContent(pBody);
@@ -572,22 +572,22 @@ void FilesForm::BuildBody(ui::VBox* pRoot)
 void FilesForm::BuildSidebar(ui::HBox* pParent)
 {
     m_pSidebar = new ui::VBox(this);
-    m_pSidebar->SetAttribute(DUI_T("width"), DUI_T("180"));
-    m_pSidebar->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-    m_pSidebar->SetAttribute(DUI_T("padding"), DUI_T("8,10,8,10"));
+    m_pSidebar->SetAttribute("width", "180");
+    m_pSidebar->SetAttribute("height", "stretch");
+    m_pSidebar->SetAttribute("padding", "8,10,8,10");
     m_pSidebar->SetBkColor(kSidebarBg);
 
     ui::Label* pTitle = new ui::Label(this);
-    pTitle->SetText(DUI_T("位置"));
-    pTitle->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+    pTitle->SetText("位置");
+    pTitle->SetAttribute("font", "system_12");
     pTitle->SetStateTextColor(ui::kControlStateNormal, kTextHint);
-    pTitle->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-    pTitle->SetAttribute(DUI_T("height"), DUI_T("24"));
+    pTitle->SetAttribute("text_align", "left,vcenter");
+    pTitle->SetAttribute("height", "24");
     pTitle->SetMouseEnabled(false);
     m_pSidebar->AddItem(pTitle);
 
     const char* home = std::getenv("HOME");
-    const DString homeDir(home != nullptr ? home : "/");
+    const U8String homeDir(home != nullptr ? home : "/");
 
     std::vector<Place> places;
     places.push_back({ "主目录", homeDir, "house" });
@@ -597,46 +597,46 @@ void FilesForm::BuildSidebar(ui::HBox* pParent)
         { "音乐", "Music" }, { "图片", "Pictures" }, { "视频", "Videos" },
     };
     for (const Shortcut& shortcut : shortcuts) {
-        const DString path = homeDir + DUI_T("/") + DString(shortcut.sub);
+        const U8String path = homeDir + "/" + U8String(shortcut.sub);
         struct stat st;
         if (stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
             places.push_back({ shortcut.label, path, "folder" });
         }
     }
-    places.push_back({ "废纸篓", homeDir + DUI_T("/.Trash"), "trash" });
-    places.push_back({ "文件系统", DUI_T("/"), "disk" });
+    places.push_back({ "废纸篓", homeDir + "/.Trash", "trash" });
+    places.push_back({ "文件系统", "/", "disk" });
 
     for (const Place& place : places) {
         // An icon and a label rather than the button's own text, so each place
         // gets the glyph it deserves.
         ui::ButtonHBox* pItem = new ui::ButtonHBox(this);
-        pItem->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pItem->SetAttribute(DUI_T("height"), DUI_T("30"));
-        pItem->SetAttribute(DUI_T("margin"), DUI_T("0,1,0,1"));
-        pItem->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pItem->SetAttribute("width", "stretch");
+        pItem->SetAttribute("height", "30");
+        pItem->SetAttribute("margin", "0,1,0,1");
+        pItem->SetAttribute("cursor_type", "hand");
         // No hover, and no press flash either: the sidebar's one highlight is
         // the place the window is at, which UpdateBreadcrumb sets and clears.
         SetAllStateColors(pItem, kTransparent);
         SetRadius(pItem, 6, true);
 
         ui::HBox* pIconCell = new ui::HBox(this);
-        pIconCell->SetAttribute(DUI_T("width"), DUI_T("30"));
-        pIconCell->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-        pIconCell->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
+        pIconCell->SetAttribute("width", "30");
+        pIconCell->SetAttribute("height", "stretch");
+        pIconCell->SetAttribute("child_align", "hcenter,vcenter");
         pIconCell->SetMouseEnabled(false);
-        pIconCell->AddItem(MakePlaceIcon(this, DString(place.icon)));
+        pIconCell->AddItem(MakePlaceIcon(this, U8String(place.icon)));
         pItem->AddItem(pIconCell);
 
         ui::Label* pText = new ui::Label(this);
-        pText->SetText(DString(place.label));
-        pText->SetAttribute(DUI_T("font"), DUI_T("system_14"));
-        pText->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
+        pText->SetText(U8String(place.label));
+        pText->SetAttribute("font", "system_14");
+        pText->SetAttribute("text_align", "left,vcenter");
         pText->SetStateTextColor(ui::kControlStateNormal, kTextBody);
-        pText->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pText->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+        pText->SetAttribute("width", "stretch");
+        pText->SetAttribute("height", "stretch");
         pText->SetMouseEnabled(false);
         pItem->AddItem(pText);
-        const DString path = place.path;
+        const U8String path = place.path;
         pItem->AttachClick([this, path](const ui::EventArgs&) {
             Navigate(path);
             return true;
@@ -658,35 +658,35 @@ void FilesForm::BuildSidebar(ui::HBox* pParent)
 void FilesForm::BuildContent(ui::HBox* pParent)
 {
     ui::VBox* pContent = new ui::VBox(this);
-    pContent->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    pContent->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+    pContent->SetAttribute("width", "stretch");
+    pContent->SetAttribute("height", "stretch");
     // Inset on the right so the list's scrollbar does not sit hard against the
     // window edge: the compositor treats the outermost pixels of a window as a
     // resize hotspot, and a bar drawn there is under the pointer's own edge
     // rather than under the app. The headings move with the list, so the
     // columns stay lined up.
-    pContent->SetAttribute(DUI_T("padding"), DUI_T("0,0,8,0"));
+    pContent->SetAttribute("padding", "0,0,8,0");
 
     // Column headings. Clicking one sorts by it and clicks again reverse it,
     // which is the one thing every file browser's list view shares.
     m_pHeaderRow = new ui::HBox(this);
-    m_pHeaderRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    m_pHeaderRow->SetAttribute(DUI_T("height"), DUI_T("26"));
-    m_pHeaderRow->SetAttribute(DUI_T("padding"), DUI_T("8,0,8,0"));
+    m_pHeaderRow->SetAttribute("width", "stretch");
+    m_pHeaderRow->SetAttribute("height", "26");
+    m_pHeaderRow->SetAttribute("padding", "8,0,8,0");
     m_pHeaderRow->SetBkColor(kBarBg);
 
     const char* kColumnNames[] = { "名称", "大小", "修改日期" };
     const int kColumnWidths[] = { 0, 110, 160 };   // 0 = stretch
     for (int i = 0; i < 3; ++i) {
         ui::Button* pColumn = new ui::Button(this);
-        pColumn->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        pColumn->SetAttribute("font", "system_12");
         pColumn->SetStateTextColor(ui::kControlStateNormal, kTextHint);
-        pColumn->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-        pColumn->SetAttribute(DUI_T("text_padding"), DUI_T("6,0,6,0"));
-        pColumn->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-        pColumn->SetAttribute(DUI_T("width"),
-            kColumnWidths[i] == 0 ? DUI_T("stretch") : Num(kColumnWidths[i]));
-        pColumn->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pColumn->SetAttribute("text_align", "left,vcenter");
+        pColumn->SetAttribute("text_padding", "6,0,6,0");
+        pColumn->SetAttribute("height", "stretch");
+        pColumn->SetAttribute("width",
+            kColumnWidths[i] == 0 ? "stretch" : Num(kColumnWidths[i]));
+        pColumn->SetAttribute("cursor_type", "hand");
         SetAllStateColors(pColumn, kTransparent);
         pColumn->AttachClick([this, i](const ui::EventArgs&) {
             if (m_sortColumn == i) {
@@ -698,15 +698,15 @@ void FilesForm::BuildContent(ui::HBox* pParent)
             ReloadList();
             return true;
         });
-        pColumn->SetText(DString(kColumnNames[i]));
+        pColumn->SetText(U8String(kColumnNames[i]));
         m_pHeaderRow->AddItem(pColumn);
         m_pColumnButtons[i] = pColumn;
     }
     pContent->AddItem(m_pHeaderRow);
 
     m_pFileList = new ui::VScrollBox(this);
-    m_pFileList->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    m_pFileList->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+    m_pFileList->SetAttribute("width", "stretch");
+    m_pFileList->SetAttribute("height", "stretch");
     m_pFileList->SetBkColor(kListBg);
     m_pFileList->SetBorderColor(kTransparent);
     // Without this the pane only moves on a drag: dui builds a scroll box's
@@ -722,25 +722,25 @@ void FilesForm::BuildContent(ui::HBox* pParent)
 void FilesForm::BuildStatusBar(ui::VBox* pRoot)
 {
     ui::HBox* pStatus = new ui::HBox(this);
-    pStatus->SetAttribute(DUI_T("height"), DUI_T("30"));
-    pStatus->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    pStatus->SetAttribute(DUI_T("padding"), DUI_T("12,0,12,0"));
+    pStatus->SetAttribute("height", "30");
+    pStatus->SetAttribute("width", "stretch");
+    pStatus->SetAttribute("padding", "12,0,12,0");
     pStatus->SetBkColor(kBarBg);
     pStatus->AddItem(MakeHairline(this, false));
 
     ui::HBox* pRow = new ui::HBox(this);
-    pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    pRow->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+    pRow->SetAttribute("width", "stretch");
+    pRow->SetAttribute("height", "stretch");
     pRow->AddItem(nullptr);
     pRow->RemoveAllItems();
 
     // The path takes whatever room is left; the counts get a fixed column so
     // neither squeezes the other off the end.
-    m_pStatusLabel = MakeStatusText(this, DUI_T(""), kTextBody, DUI_T("left,vcenter"));
-    m_pStatusLabel->SetAttribute(DUI_T("width"), DUI_T("stretch"));
+    m_pStatusLabel = MakeStatusText(this, "", kTextBody, "left,vcenter");
+    m_pStatusLabel->SetAttribute("width", "stretch");
     pRow->AddItem(m_pStatusLabel);
-    m_pSelectionLabel = MakeStatusText(this, DUI_T(""), kTextHint, DUI_T("right,vcenter"));
-    m_pSelectionLabel->SetAttribute(DUI_T("width"), DUI_T("200"));
+    m_pSelectionLabel = MakeStatusText(this, "", kTextHint, "right,vcenter");
+    m_pSelectionLabel->SetAttribute("width", "200");
     pRow->AddItem(m_pSelectionLabel);
 
     pStatus->AddItem(pRow);
@@ -754,20 +754,20 @@ void FilesForm::BuildContextMenu()
     m_pContextMenu->SetKeepFloatPos(true);
     m_pContextMenu->SetBkColor(kBarBg);
     m_pContextMenu->SetBorderColor(kBarBorder);
-    m_pContextMenu->SetAttribute(DUI_T("border_size"), DUI_T("1"));
-    m_pContextMenu->SetAttribute(DUI_T("width"), DUI_T("180"));
-    m_pContextMenu->SetAttribute(DUI_T("padding"), DUI_T("6,6,6,6"));
+    m_pContextMenu->SetAttribute("border_size", "1");
+    m_pContextMenu->SetAttribute("width", "180");
+    m_pContextMenu->SetAttribute("padding", "6,6,6,6");
     SetRadius(m_pContextMenu, 9, false);
     m_pContextMenu->SetPaintOrder(200);
     m_pContextMenu->SetVisible(false);
 }
 
-bool FilesForm::Navigate(const DString& path)
+bool FilesForm::Navigate(const U8String& path)
 {
     std::vector<Entry> entries;
     if (!ListDirectory(path, entries)) {
         if (m_pStatusLabel != nullptr) {
-            m_pStatusLabel->SetText(DUI_T("无法打开目录：") + path);
+            m_pStatusLabel->SetText("无法打开目录：" + path);
         }
         return false;
     }
@@ -789,7 +789,7 @@ void FilesForm::NavigateBack()
         return;
     }
     m_forward.push_back(m_curDir);
-    const DString previous = m_history.back();
+    const U8String previous = m_history.back();
     m_history.pop_back();
     std::vector<Entry> entries;
     if (ListDirectory(previous, entries)) {
@@ -806,7 +806,7 @@ void FilesForm::NavigateForward()
     if (m_forward.empty()) {
         return;
     }
-    const DString next = m_forward.back();
+    const U8String next = m_forward.back();
     std::vector<Entry> entries;
     if (ListDirectory(next, entries)) {
         m_forward.pop_back();
@@ -823,15 +823,15 @@ void FilesForm::NavigateForward()
 
 void FilesForm::NavigateUp()
 {
-    if (m_curDir.empty() || m_curDir == DUI_T("/")) {
+    if (m_curDir.empty() || m_curDir == "/") {
         return;
     }
-    DString parent = m_curDir;
-    while (parent.size() > 1 && parent.back() == DUI_T('/')) {
+    U8String parent = m_curDir;
+    while (parent.size() > 1 && parent.back() == '/') {
         parent.pop_back();
     }
-    const size_t slash = parent.find_last_of(DUI_T('/'));
-    parent = (slash == DString::npos || slash == 0) ? DString(DUI_T("/"))
+    const size_t slash = parent.find_last_of('/');
+    parent = (slash == U8String::npos || slash == 0) ? U8String("/")
                                                     : parent.substr(0, slash);
     Navigate(parent);
 }
@@ -856,11 +856,11 @@ bool FilesForm::IsSelected(size_t index) const
     if (index >= m_entries.size()) {
         return false;
     }
-    const DString& name = m_entries[index].name;
+    const U8String& name = m_entries[index].name;
     return std::find(m_selected.begin(), m_selected.end(), name) != m_selected.end();
 }
 
-bool FilesForm::ListDirectory(const DString& dir, std::vector<Entry>& out)
+bool FilesForm::ListDirectory(const U8String& dir, std::vector<Entry>& out)
 {
     out.clear();
     DIR* dp = opendir(dir.c_str());
@@ -878,9 +878,9 @@ bool FilesForm::ListDirectory(const DString& dir, std::vector<Entry>& out)
         entry.isDir = (ent->d_type == DT_DIR);
         entry.size = 0;
 
-        DString full = dir;
-        if (!full.empty() && full.back() != DUI_T('/')) {
-            full += DUI_T('/');
+        U8String full = dir;
+        if (!full.empty() && full.back() != '/') {
+            full += '/';
         }
         full += entry.name;
 
@@ -952,9 +952,9 @@ void FilesForm::ReloadList()
         if (m_pColumnButtons[i] == nullptr) {
             continue;
         }
-        DString text(kColumnNames[i]);
+        U8String text(kColumnNames[i]);
         if (i == m_sortColumn) {
-            text += m_sortAscending ? DUI_T(" ▲") : DUI_T(" ▼");
+            text += m_sortAscending ? " ▲" : " ▼";
         }
         m_pColumnButtons[i]->SetText(text);
     }
@@ -992,17 +992,17 @@ void FilesForm::ReloadList()
         for (size_t i = 0; i < m_entries.size(); ++i) {
             if (i % columns == 0) {
                 pRow = new ui::HBox(this);
-                pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-                pRow->SetAttribute(DUI_T("height"), Num(kIconTileH));
+                pRow->SetAttribute("width", "stretch");
+                pRow->SetAttribute("height", Num(kIconTileH));
                 m_pFileList->AddItem(pRow);
             }
             const Entry& entry = m_entries[i];
 
             ui::ButtonVBox* pTile = new ui::ButtonVBox(this);
-            pTile->SetAttribute(DUI_T("width"), Num(kIconTileW));
-            pTile->SetAttribute(DUI_T("height"), Num(kIconTileH));
-            pTile->SetAttribute(DUI_T("margin"), DUI_T("4,4,4,4"));
-            pTile->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+            pTile->SetAttribute("width", Num(kIconTileW));
+            pTile->SetAttribute("height", Num(kIconTileH));
+            pTile->SetAttribute("margin", "4,4,4,4");
+            pTile->SetAttribute("cursor_type", "hand");
             // Selected and hot the same: the click that selects a tile leaves
             // it hot, and the two must not disagree (see the note on hover at
             // the top of this file).
@@ -1010,14 +1010,14 @@ void FilesForm::ReloadList()
             SetRadius(pTile, 8, true);
 
             ui::HBox* pIconCell = new ui::HBox(this);
-            pIconCell->SetAttribute(DUI_T("width"), Num(kIconTileW - 8));
-            pIconCell->SetAttribute(DUI_T("height"), DUI_T("56"));
-            pIconCell->SetAttribute(DUI_T("halign"), DUI_T("center"));
+            pIconCell->SetAttribute("width", Num(kIconTileW - 8));
+            pIconCell->SetAttribute("height", "56");
+            pIconCell->SetAttribute("halign", "center");
             // The cell centres its glyph: a box packs its children at the top
             // left unless it is told otherwise, so without this the icon sits
             // at the left of the cell while the name below it is centred, and
             // the two do not line up.
-            pIconCell->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
+            pIconCell->SetAttribute("child_align", "hcenter,vcenter");
             pIconCell->SetMouseEnabled(false);
             pIconCell->AddItem(entry.isDir ? MakeFolderIcon(this, 42)
                                            : MakeFileIcon(this, 42));
@@ -1025,13 +1025,13 @@ void FilesForm::ReloadList()
 
             ui::Label* pName = new ui::Label(this);
             pName->SetText(entry.name);
-            pName->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+            pName->SetAttribute("font", "system_12");
             pName->SetStateTextColor(ui::kControlStateNormal,
                                      entry.isDir ? kAccent : kTextDark);
-            pName->SetAttribute(DUI_T("text_align"), DUI_T("hcenter,vtop"));
-            pName->SetAttribute(DUI_T("width"), Num(kIconTileW - 8));
-            pName->SetAttribute(DUI_T("height"), DUI_T("34"));
-            pName->SetAttribute(DUI_T("halign"), DUI_T("center"));
+            pName->SetAttribute("text_align", "hcenter,vtop");
+            pName->SetAttribute("width", Num(kIconTileW - 8));
+            pName->SetAttribute("height", "34");
+            pName->SetAttribute("halign", "center");
             pName->SetMouseEnabled(false);
             pTile->AddItem(pName);
 
@@ -1054,17 +1054,17 @@ void FilesForm::ReloadList()
     for (size_t i = 0; i < m_entries.size(); ++i) {
         const Entry& entry = m_entries[i];
         ui::ButtonHBox* pRow = new ui::ButtonHBox(this);
-        pRow->SetAttribute(DUI_T("height"), Num(kRowHeight));
-        pRow->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pRow->SetAttribute(DUI_T("padding"), DUI_T("10,0,10,0"));
+        pRow->SetAttribute("height", Num(kRowHeight));
+        pRow->SetAttribute("width", "stretch");
+        pRow->SetAttribute("padding", "10,0,10,0");
         SetAllStateColors(pRow, IsSelected(i) ? kRowSelected : kTransparent);
         SetRadius(pRow, 6, true);
-        pRow->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+        pRow->SetAttribute("cursor_type", "hand");
 
         ui::HBox* pIconCell = new ui::HBox(this);
-        pIconCell->SetAttribute(DUI_T("width"), DUI_T("32"));
-        pIconCell->SetAttribute(DUI_T("height"), DUI_T("stretch"));
-        pIconCell->SetAttribute(DUI_T("child_align"), DUI_T("hcenter,vcenter"));
+        pIconCell->SetAttribute("width", "32");
+        pIconCell->SetAttribute("height", "stretch");
+        pIconCell->SetAttribute("child_align", "hcenter,vcenter");
         pIconCell->SetMouseEnabled(false);
         pIconCell->AddItem(entry.isDir ? MakeFolderIcon(this, 20)
                                        : MakeFileIcon(this, 20));
@@ -1072,32 +1072,32 @@ void FilesForm::ReloadList()
 
         ui::Label* pName = new ui::Label(this);
         pName->SetText(entry.name);
-        pName->SetAttribute(DUI_T("font"), DUI_T("system_14"));
+        pName->SetAttribute("font", "system_14");
         pName->SetStateTextColor(ui::kControlStateNormal,
                                  entry.isDir ? kAccent : kTextDark);
-        pName->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-        pName->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pName->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+        pName->SetAttribute("text_align", "left,vcenter");
+        pName->SetAttribute("width", "stretch");
+        pName->SetAttribute("height", "stretch");
         pName->SetMouseEnabled(false);
         pRow->AddItem(pName);
 
         ui::Label* pSize = new ui::Label(this);
-        pSize->SetText(entry.isDir ? DUI_T("—") : FormatSize(entry.size));
-        pSize->SetAttribute(DUI_T("font"), DUI_T("system_13"));
+        pSize->SetText(entry.isDir ? "—" : FormatSize(entry.size));
+        pSize->SetAttribute("font", "system_13");
         pSize->SetStateTextColor(ui::kControlStateNormal, kTextHint);
-        pSize->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
-        pSize->SetAttribute(DUI_T("width"), DUI_T("110"));
-        pSize->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+        pSize->SetAttribute("text_align", "right,vcenter");
+        pSize->SetAttribute("width", "110");
+        pSize->SetAttribute("height", "stretch");
         pSize->SetMouseEnabled(false);
         pRow->AddItem(pSize);
 
         ui::Label* pTime = new ui::Label(this);
         pTime->SetText(entry.mtime);
-        pTime->SetAttribute(DUI_T("font"), DUI_T("system_13"));
+        pTime->SetAttribute("font", "system_13");
         pTime->SetStateTextColor(ui::kControlStateNormal, kTextHint);
-        pTime->SetAttribute(DUI_T("text_align"), DUI_T("right,vcenter"));
-        pTime->SetAttribute(DUI_T("width"), DUI_T("160"));
-        pTime->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+        pTime->SetAttribute("text_align", "right,vcenter");
+        pTime->SetAttribute("width", "160");
+        pTime->SetAttribute("height", "stretch");
         pTime->SetMouseEnabled(false);
         pRow->AddItem(pTime);
 
@@ -1147,7 +1147,7 @@ void FilesForm::SelectRow(size_t index, unsigned int modifiers)
                 m_selected.push_back(m_entries[i].name);
             }
         } else if (IsSelected(index)) {
-            const DString& name = m_entries[index].name;
+            const U8String& name = m_entries[index].name;
             m_selected.erase(std::find(m_selected.begin(), m_selected.end(), name));
             m_anchor = name;
         } else {
@@ -1192,15 +1192,15 @@ void FilesForm::ShowEntryMenu(size_t index, const ui::UiPoint& pt)
     };
     for (const Action& action : actions) {
         ui::Button* pItem = new ui::Button(this);
-        pItem->SetText(DString(action.label));
-        pItem->SetAttribute(DUI_T("font"), DUI_T("system_14"));
+        pItem->SetText(U8String(action.label));
+        pItem->SetAttribute("font", "system_14");
         pItem->SetStateTextColor(ui::kControlStateNormal,
-                                 action.id == 4 ? DUI_T("#FFFF453A") : kTextBody);
-        pItem->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-        pItem->SetAttribute(DUI_T("text_padding"), DUI_T("10,0,10,0"));
-        pItem->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pItem->SetAttribute(DUI_T("height"), DUI_T("30"));
-        pItem->SetAttribute(DUI_T("cursor_type"), DUI_T("hand"));
+                                 action.id == 4 ? "#FFFF453A" : kTextBody);
+        pItem->SetAttribute("text_align", "left,vcenter");
+        pItem->SetAttribute("text_padding", "10,0,10,0");
+        pItem->SetAttribute("width", "stretch");
+        pItem->SetAttribute("height", "30");
+        pItem->SetAttribute("cursor_type", "hand");
         SetAllStateColors(pItem, kTransparent);
         SetRadius(pItem, 6, true);
         const size_t row = index;
@@ -1213,10 +1213,10 @@ void FilesForm::ShowEntryMenu(size_t index, const ui::UiPoint& pt)
             if (id == 0) {
                 OpenEntry(m_entries[row]);
             } else if (id == 1) {
-                DString cmd = m_curDir;
+                U8String cmd = m_curDir;
                 ShellQuote(cmd);
-                LaunchCommand(DString(DUI_T("wayst -e sh -c 'cd ")) + cmd +
-                              DUI_T(" && exec bash'"));
+                LaunchCommand(U8String("wayst -e sh -c 'cd ") + cmd +
+                              " && exec bash'");
             } else if (id == 2) {
                 NewFolder();
             } else if (id == 3) {
@@ -1239,7 +1239,7 @@ void FilesForm::ShowEntryMenu(size_t index, const ui::UiPoint& pt)
     if (py + height > client.bottom) py = client.bottom - height - 4;
     if (px < 4) px = 4;
     if (py < 4) py = 4;
-    m_pContextMenu->SetAttribute(DUI_T("height"), Num(height));
+    m_pContextMenu->SetAttribute("height", Num(height));
     m_pContextMenu->SetPos(ui::UiRect(px, py, px + width, py + height));
     m_pContextMenu->SetVisible(true);
     m_pContextMenu->Invalidate();
@@ -1252,9 +1252,9 @@ void FilesForm::ShowProperties(size_t index)
     }
     const Entry& entry = m_entries[index];
 
-    DString full = m_curDir;
-    if (!full.empty() && full.back() != DUI_T('/')) {
-        full += DUI_T('/');
+    U8String full = m_curDir;
+    if (!full.empty() && full.back() != '/') {
+        full += '/';
     }
     full += entry.name;
 
@@ -1270,51 +1270,51 @@ void FilesForm::ShowProperties(size_t index)
     m_pContextMenu->RemoveAllItems();
     ui::Label* pTitle = new ui::Label(this);
     pTitle->SetText(entry.name);
-    pTitle->SetAttribute(DUI_T("font"), DUI_T("system_14"));
+    pTitle->SetAttribute("font", "system_14");
     pTitle->SetStateTextColor(ui::kControlStateNormal, kTextDark);
-    pTitle->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-    pTitle->SetAttribute(DUI_T("text_padding"), DUI_T("10,0,10,0"));
-    pTitle->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-    pTitle->SetAttribute(DUI_T("height"), DUI_T("26"));
+    pTitle->SetAttribute("text_align", "left,vcenter");
+    pTitle->SetAttribute("text_padding", "10,0,10,0");
+    pTitle->SetAttribute("width", "stretch");
+    pTitle->SetAttribute("height", "26");
     pTitle->SetMouseEnabled(false);
     m_pContextMenu->AddItem(pTitle);
 
-    struct Row { const char* label; DString value; };
+    struct Row { const char* label; U8String value; };
     std::vector<Row> rows;
-    rows.push_back({ "类型", entry.isDir ? DString(DUI_T("文件夹")) : DString(DUI_T("文件")) });
+    rows.push_back({ "类型", entry.isDir ? U8String("文件夹") : U8String("文件") });
     if (!entry.isDir) {
         rows.push_back({ "大小", FormatSize(entry.size) });
     }
     rows.push_back({ "修改时间", entry.mtime });
     if (!owner.empty()) {
-        rows.push_back({ "权限", DString(owner.c_str()) });
+        rows.push_back({ "权限", U8String(owner.c_str()) });
     }
     rows.push_back({ "位置", m_curDir });
 
     for (const Row& row : rows) {
         ui::HBox* pLine = new ui::HBox(this);
-        pLine->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pLine->SetAttribute(DUI_T("height"), DUI_T("22"));
+        pLine->SetAttribute("width", "stretch");
+        pLine->SetAttribute("height", "22");
         pLine->SetMouseEnabled(false);
 
         ui::Label* pKey = new ui::Label(this);
-        pKey->SetText(DString(row.label));
-        pKey->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        pKey->SetText(U8String(row.label));
+        pKey->SetAttribute("font", "system_12");
         pKey->SetStateTextColor(ui::kControlStateNormal, kTextHint);
-        pKey->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-        pKey->SetAttribute(DUI_T("text_padding"), DUI_T("10,0,0,0"));
-        pKey->SetAttribute(DUI_T("width"), DUI_T("70"));
-        pKey->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+        pKey->SetAttribute("text_align", "left,vcenter");
+        pKey->SetAttribute("text_padding", "10,0,0,0");
+        pKey->SetAttribute("width", "70");
+        pKey->SetAttribute("height", "stretch");
         pKey->SetMouseEnabled(false);
         pLine->AddItem(pKey);
 
         ui::Label* pValue = new ui::Label(this);
         pValue->SetText(row.value);
-        pValue->SetAttribute(DUI_T("font"), DUI_T("system_12"));
+        pValue->SetAttribute("font", "system_12");
         pValue->SetStateTextColor(ui::kControlStateNormal, kTextBody);
-        pValue->SetAttribute(DUI_T("text_align"), DUI_T("left,vcenter"));
-        pValue->SetAttribute(DUI_T("width"), DUI_T("stretch"));
-        pValue->SetAttribute(DUI_T("height"), DUI_T("stretch"));
+        pValue->SetAttribute("text_align", "left,vcenter");
+        pValue->SetAttribute("width", "stretch");
+        pValue->SetAttribute("height", "stretch");
         pValue->SetMouseEnabled(false);
         pLine->AddItem(pValue);
 
@@ -1329,8 +1329,8 @@ void FilesForm::ShowProperties(size_t index)
     int py = 140;
     if (px < 4) px = 4;
     if (py + height > client.bottom) py = client.bottom - height - 8;
-    m_pContextMenu->SetAttribute(DUI_T("width"), Num(width));
-    m_pContextMenu->SetAttribute(DUI_T("height"), Num(height));
+    m_pContextMenu->SetAttribute("width", Num(width));
+    m_pContextMenu->SetAttribute("height", Num(height));
     m_pContextMenu->SetPos(ui::UiRect(px, py, px + width, py + height));
     m_pContextMenu->SetVisible(true);
     m_pContextMenu->Invalidate();
@@ -1353,25 +1353,25 @@ void FilesForm::TrashEntry(size_t index)
     if (home == nullptr) {
         return;
     }
-    DString source = m_curDir;
-    if (!source.empty() && source.back() != DUI_T('/')) {
-        source += DUI_T('/');
+    U8String source = m_curDir;
+    if (!source.empty() && source.back() != '/') {
+        source += '/';
     }
     source += m_entries[index].name;
-    DString trashDir(home);
-    trashDir += DUI_T("/.Trash");
-    DString target = trashDir + DUI_T("/") + m_entries[index].name;
+    U8String trashDir(home);
+    trashDir += "/.Trash";
+    U8String target = trashDir + "/" + m_entries[index].name;
 
-    DString quotedSource = source;
-    DString quotedTarget = target;
-    DString quotedTrashDir = trashDir;
+    U8String quotedSource = source;
+    U8String quotedTarget = target;
+    U8String quotedTrashDir = trashDir;
     ShellQuote(quotedSource);
     ShellQuote(quotedTarget);
     ShellQuote(quotedTrashDir);
 
     // Never clobber something already in the trash: a plain mv would.
-    LaunchCommand(DString(DUI_T("mkdir -p ")) + quotedTrashDir + DUI_T(" && mv -n ") +
-                  quotedSource + DUI_T(" ") + quotedTarget);
+    LaunchCommand(U8String("mkdir -p ") + quotedTrashDir + " && mv -n " +
+                  quotedSource + " " + quotedTarget);
     Refresh();
 }
 
@@ -1379,7 +1379,7 @@ void FilesForm::NewFolder()
 {
     std::vector<Entry> existing;
     ListDirectory(m_curDir, existing);
-    DString name = DUI_T("新建文件夹");
+    U8String name = "新建文件夹";
     bool taken = true;
     int suffix = 1;
     while (taken) {
@@ -1391,20 +1391,20 @@ void FilesForm::NewFolder()
             }
         }
         if (taken) {
-            DString candidate = DUI_T("新建文件夹 ");
+            U8String candidate = "新建文件夹 ";
             candidate += std::to_string(++suffix).c_str();
             name = candidate;
         }
     }
 
-    DString path = m_curDir;
-    if (!path.empty() && path.back() != DUI_T('/')) {
-        path += DUI_T('/');
+    U8String path = m_curDir;
+    if (!path.empty() && path.back() != '/') {
+        path += '/';
     }
     path += name;
-    DString quoted = path;
+    U8String quoted = path;
     ShellQuote(quoted);
-    LaunchCommand(DString(DUI_T("mkdir -p ")) + quoted);
+    LaunchCommand(U8String("mkdir -p ") + quoted);
     Refresh();
 }
 
@@ -1415,24 +1415,24 @@ void FilesForm::UpdateBreadcrumb()
     }
 
     // Split the path into segments, each of which navigates to its prefix.
-    std::vector<std::pair<DString, DString>> crumbs;   // label, full path
-    crumbs.push_back({ DUI_T("文件系统"), DString(DUI_T("/")) });
-    DString accumulated(DUI_T("/"));
-    DString rest = m_curDir;
-    if (!rest.empty() && rest[0] == DUI_T('/')) {
+    std::vector<std::pair<U8String, U8String>> crumbs;   // label, full path
+    crumbs.push_back({ "文件系统", U8String("/") });
+    U8String accumulated("/");
+    U8String rest = m_curDir;
+    if (!rest.empty() && rest[0] == '/') {
         rest = rest.substr(1);
     }
     while (!rest.empty()) {
-        const size_t slash = rest.find(DUI_T('/'));
-        const DString segment = (slash == DString::npos) ? rest : rest.substr(0, slash);
+        const size_t slash = rest.find('/');
+        const U8String segment = (slash == U8String::npos) ? rest : rest.substr(0, slash);
         if (!segment.empty()) {
             if (accumulated.size() > 1) {
-                accumulated += DUI_T('/');
+                accumulated += '/';
             }
             accumulated += segment;
             crumbs.push_back({ segment, accumulated });
         }
-        if (slash == DString::npos) {
+        if (slash == U8String::npos) {
             break;
         }
         rest = rest.substr(slash + 1);
@@ -1451,10 +1451,10 @@ void FilesForm::UpdateBreadcrumb()
             continue;
         }
         if (static_cast<size_t>(i) < shown) {
-            const std::pair<DString, DString>& crumb = crumbs[first + i];
-            DString label = crumb.first;
+            const std::pair<U8String, U8String>& crumb = crumbs[first + i];
+            U8String label = crumb.first;
             if (i == 0 && first > 0) {
-                label = DString(DUI_T("…/")) + label;
+                label = U8String("…/") + label;
             }
             pCrumb->SetText(label);
             m_crumbTargets[i] = crumb.second;
@@ -1465,7 +1465,7 @@ void FilesForm::UpdateBreadcrumb()
             // Slots past the end of the path are emptied, separator and all.
             // They keep their width -- dui lays a control out once -- so the
             // only thing that can make them disappear is painting nothing.
-            pCrumb->SetText(DUI_T(""));
+            pCrumb->SetText("");
             m_crumbTargets[i] = "";
         }
     }
@@ -1474,7 +1474,7 @@ void FilesForm::UpdateBreadcrumb()
     // none after the last one: m_pCrumbSeps[i-1] belongs in front of slot i.
     for (size_t i = 0; i < m_pCrumbSeps.size(); ++i) {
         const bool wanted = (i + 1) < shown;
-        m_pCrumbSeps[i]->SetText(wanted ? DUI_T("›") : DUI_T(""));
+        m_pCrumbSeps[i]->SetText(wanted ? "›" : "");
     }
 
     // Highlight the deepest place the current directory sits under. Only one
@@ -1485,9 +1485,9 @@ void FilesForm::UpdateBreadcrumb()
     // places can be the same length: /home/shxu/Documents and
     // /home/shxu/Downloads are both 21 characters, so a "length == the deepest
     // match's length" test lit both of them whenever the window was in either.
-    const DString* best = nullptr;
+    const U8String* best = nullptr;
     if (!m_curDir.empty()) {
-        for (const DString& target : m_placePaths) {
+        for (const U8String& target : m_placePaths) {
             if (target.empty() || target.size() > m_curDir.size()) {
                 continue;
             }
@@ -1495,7 +1495,7 @@ void FilesForm::UpdateBreadcrumb()
                 continue;
             }
             const bool atBoundary = target.size() == m_curDir.size() ||
-                (target != DUI_T("/") && m_curDir[target.size()] == DUI_T('/'));
+                (target != "/" && m_curDir[target.size()] == '/');
             if (!atBoundary) {
                 continue;
             }
@@ -1544,36 +1544,36 @@ void FilesForm::UpdateStatus()
                 ++dirs;
             }
         }
-        DString text = Num(static_cast<int>(m_entries.size())) + DUI_T(" 个项目");
+        U8String text = Num(static_cast<int>(m_entries.size())) + " 个项目";
         if (dirs > 0) {
-            text += DUI_T("（") + Num(static_cast<int>(dirs)) + DUI_T(" 个文件夹）");
+            text += "（" + Num(static_cast<int>(dirs)) + " 个文件夹）";
         }
         if (!m_selected.empty()) {
-            text += DUI_T("  已选 ") + Num(static_cast<int>(m_selected.size())) + DUI_T(" 项");
+            text += "  已选 " + Num(static_cast<int>(m_selected.size())) + " 项";
         }
         m_pSelectionLabel->SetText(text);
     }
 }
 
-void FilesForm::ShellQuote(DString& arg)
+void FilesForm::ShellQuote(U8String& arg)
 {
-    DString quoted = DUI_T("'");
-    for (DString::value_type ch : arg) {
-        if (ch == DUI_T('\'')) {
-            quoted += DUI_T("'\\''");
+    U8String quoted = "'";
+    for (U8String::value_type ch : arg) {
+        if (ch == '\'') {
+            quoted += "'\\''";
         } else {
             quoted.push_back(ch);
         }
     }
-    quoted += DUI_T("'");
+    quoted += "'";
     arg = quoted;
 }
 
 void FilesForm::OpenEntry(const Entry& entry)
 {
-    DString full = m_curDir;
-    if (!full.empty() && full.back() != DUI_T('/')) {
-        full += DUI_T('/');
+    U8String full = m_curDir;
+    if (!full.empty() && full.back() != '/') {
+        full += '/';
     }
     full += entry.name;
 
@@ -1587,18 +1587,18 @@ void FilesForm::OpenEntry(const Entry& entry)
     if (stat(full.c_str(), &st) == 0 &&
         S_ISREG(st.st_mode) && (st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) != 0 &&
         !IsTextExtension(entry.name)) {
-        DString cmd = full;
+        U8String cmd = full;
         ShellQuote(cmd);
         LaunchCommand(cmd);
         return;
     }
 
-    DString quoted = full;
+    U8String quoted = full;
     ShellQuote(quoted);
-    LaunchCommand(DString(DUI_T("wayst -e vim ")) + quoted);
+    LaunchCommand(U8String("wayst -e vim ") + quoted);
 }
 
-void FilesForm::LaunchCommand(const DString& cmdline)
+void FilesForm::LaunchCommand(const U8String& cmdline)
 {
     printf("[polluxdesk-files] launch: %s\n", cmdline.c_str());
     fflush(stdout);

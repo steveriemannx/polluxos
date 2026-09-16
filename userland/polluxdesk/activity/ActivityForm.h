@@ -36,8 +36,8 @@ public:
     virtual ~ActivityForm() override;
 
     /** Resource-related interfaces: pure code mode, no layout XML is loaded. */
-    virtual DString GetSkinFolder() override;
-    virtual DString GetSkinFile() override;
+    virtual U8String GetSkinFolder() override;
+    virtual U8String GetSkinFile() override;
 
     /** Window creation attributes (no caption/shadow: compositor draws them). */
     virtual void GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs) override;
@@ -72,10 +72,10 @@ private:
      *  appearance and the accent colour chosen in the settings app. */
     struct Palette
     {
-        DString windowBg, cardBg, cardBorder, headerBg, rowAlternate, hairline;
-        DString textStrong, textBody, textHint, accent, textOnAccent;
-        DString track, grid, tabTrack;
-        DString cpuUser, cpuSystem, memUsed, diskFill, diskFull, netDown, netUp;
+        U8String windowBg, cardBg, cardBorder, headerBg, rowAlternate, hairline;
+        U8String textStrong, textBody, textHint, accent, textOnAccent;
+        U8String track, grid, tabTrack;
+        U8String cpuUser, cpuSystem, memUsed, diskFill, diskFull, netDown, netUp;
     };
 
     // ---- construction ----------------------------------------------------
@@ -116,19 +116,19 @@ private:
     void FillProcessRow(size_t row, const activity::ProcessInfo& info);
 
     // ---- helpers ---------------------------------------------------------
-    ui::Label* AddLabel(ui::Box* pParent, const DString& text, const DString& font,
-                        const DString& colour);
-    ui::VBox* AddCard(ui::Box* pParent, const DString& height);
+    ui::Label* AddLabel(ui::Box* pParent, const U8String& text, const U8String& font,
+                        const U8String& colour);
+    ui::VBox* AddCard(ui::Box* pParent, const U8String& height);
     /** A legend chip: a coloured dot, a name and its reading.  The label is
      *  returned because the reading is what changes every second. */
-    ui::Label* AddLegend(ui::Box* pParent, const DString& colour,
-                         const DString& text, const DString& width);
+    ui::Label* AddLegend(ui::Box* pParent, const U8String& colour,
+                         const U8String& text, const U8String& width);
     void SetRadius(ui::Control* pControl, int radius, bool interactive);
 
-    static DString FormatBytes(unsigned long long bytes);
-    static DString FormatRate(double bytesPerSecond);
-    static DString FormatDuration(double seconds);
-    static DString FormatUptime(long seconds);
+    static U8String FormatBytes(unsigned long long bytes);
+    static U8String FormatRate(double bytesPerSecond);
+    static U8String FormatDuration(double seconds);
+    static U8String FormatUptime(long seconds);
 
     // ---- state -----------------------------------------------------------
     pollux::Settings m_settings;
@@ -151,7 +151,7 @@ private:
     int  m_sortColumn = kColCpu;
     bool m_sortAscending = false;
     std::string m_hostName;
-    DString m_lastSortTitle;
+    U8String m_lastSortTitle;
 
     // Header
     ui::HBox*   m_pHeader = nullptr;

@@ -29,8 +29,8 @@ public:
     virtual ~FilesForm() override;
 
     /** Resource-related interfaces: pure code mode, no layout XML is loaded. */
-    virtual DString GetSkinFolder() override;
-    virtual DString GetSkinFile() override;
+    virtual U8String GetSkinFolder() override;
+    virtual U8String GetSkinFile() override;
 
     /** Window creation attributes (no caption/shadow: compositor draws them). */
     virtual void GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs) override;
@@ -41,23 +41,23 @@ public:
     /** Directory to open first.  Set before the window is created; empty (the
      *  default) starts in the home directory, and a value that cannot be read
      *  falls back there rather than leaving an empty window. */
-    void SetStartDir(const DString& dir) { m_startDir = dir; }
+    void SetStartDir(const U8String& dir) { m_startDir = dir; }
 
 private:
     /** One row of the directory listing. */
     struct Entry
     {
-        DString name;      // base name
+        U8String name;      // base name
         bool isDir;
         long long size;    // bytes (0 for directories)
-        DString mtime;     // "yyyy-MM-dd HH:mm"; sorts as it reads
+        U8String mtime;     // "yyyy-MM-dd HH:mm"; sorts as it reads
     };
 
     /** A place in the sidebar. */
     struct Place
     {
         const char* label;
-        DString path;
+        U8String path;
         const char* icon;   // which drawn glyph: folder / house / trash / disk
     };
 
@@ -72,7 +72,7 @@ private:
 
     // ---- navigation ------------------------------------------------------
     /** @return false when the directory could not be listed. */
-    bool Navigate(const DString& path);
+    bool Navigate(const U8String& path);
     void NavigateBack();
     void NavigateForward();
     void NavigateUp();
@@ -95,16 +95,16 @@ private:
     bool IsSelected(size_t index) const;
 
     /** fork/exec a shell command without waiting for it. */
-    void LaunchCommand(const DString& cmdline);
+    void LaunchCommand(const U8String& cmdline);
 
-    static bool ListDirectory(const DString& dir, std::vector<Entry>& out);
-    static void ShellQuote(DString& arg);   // wrap into '...' for /bin/sh
+    static bool ListDirectory(const U8String& dir, std::vector<Entry>& out);
+    static void ShellQuote(U8String& arg);   // wrap into '...' for /bin/sh
 
     std::vector<Entry> m_entries;
-    std::vector<DString> m_history;   // visited dirs; last = previous dir
-    std::vector<DString> m_forward;   // dirs popped by NavigateBack
-    DString m_curDir;
-    DString m_startDir;
+    std::vector<U8String> m_history;   // visited dirs; last = previous dir
+    std::vector<U8String> m_forward;   // dirs popped by NavigateBack
+    U8String m_curDir;
+    U8String m_startDir;
 
     // View state.
     int  m_sortColumn = 0;        // 0 = name, 1 = size, 2 = modified
@@ -114,8 +114,8 @@ private:
     // What is selected, by name. The listing is sorted on every reload, so a
     // row index would point at whatever the sort moved into that position --
     // only the name stays with the file the click landed on.
-    std::vector<DString> m_selected;
-    DString m_anchor;                 // last clicked, for shift-click ranges
+    std::vector<U8String> m_selected;
+    U8String m_anchor;                 // last clicked, for shift-click ranges
 
     ui::VScrollBox* m_pFileList = nullptr;
     ui::HBox*       m_pHeaderRow = nullptr;
@@ -137,7 +137,7 @@ private:
     static const int kCrumbSlots = 4;
     ui::Button* m_pCrumbButtons[kCrumbSlots] = { nullptr, nullptr, nullptr,
                                                  nullptr };
-    DString     m_crumbTargets[kCrumbSlots];
+    U8String     m_crumbTargets[kCrumbSlots];
     // The "›" in front of each slot but the first, so a path that ends early
     // can take its separators with it.
     std::vector<ui::Label*> m_pCrumbSeps;
@@ -145,7 +145,7 @@ private:
     // and a label, and that is a different type. The paths sit alongside
     // rather than being read back off a tooltip.
     std::vector<ui::Control*> m_pPlaceButtons;
-    std::vector<DString>     m_placePaths;
+    std::vector<U8String>     m_placePaths;
 
     // The right-click menu: a floating panel inside the window, the same
     // technique the desktop shell uses for its dropdowns.

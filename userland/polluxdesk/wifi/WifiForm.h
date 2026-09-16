@@ -37,8 +37,8 @@ public:
     virtual ~WifiForm() override;
 
     /** Resource-related interfaces: pure code mode, no layout XML is loaded. */
-    virtual DString GetSkinFolder() override;
-    virtual DString GetSkinFile() override;
+    virtual U8String GetSkinFolder() override;
+    virtual U8String GetSkinFile() override;
 
     /** Window creation attributes (no caption/shadow: compositor draws them). */
     virtual void GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs) override;
@@ -49,9 +49,9 @@ public:
 private:
     struct Palette
     {
-        DString windowBg, cardBg, cardBorder, rowHot, rowSelected, hairline;
-        DString textStrong, textBody, textHint, accent, textOnAccent, danger;
-        DString fieldBg, fieldBorder, track;
+        U8String windowBg, cardBg, cardBorder, rowHot, rowSelected, hairline;
+        U8String textStrong, textBody, textHint, accent, textOnAccent, danger;
+        U8String fieldBg, fieldBorder, track;
     };
 
     // ---- construction ----------------------------------------------------
@@ -83,17 +83,17 @@ private:
     void ShowStatus();
 
     // ---- helpers ---------------------------------------------------------
-    ui::Label* AddLabel(ui::Box* pParent, const DString& text, const DString& font,
-                        const DString& colour);
+    ui::Label* AddLabel(ui::Box* pParent, const U8String& text, const U8String& font,
+                        const U8String& colour);
     void SetRadius(ui::Control* pControl, int radius, bool interactive);
     /** Four bars, the height of the tallest one set by the signal. */
     ui::HBox* MakeSignalBars(ui::Window* pWindow, int dbm, bool active);
-    void SetHint(const DString& text, bool bad);
+    void SetHint(const U8String& text, bool bad);
     /** The one-line fix for whichever way the control interface is missing:
      *  the setup script when there is no socket, the group that owns it when
      *  this user simply may not use it. */
-    DString SetupHint() const;
-    static DString SignalText(int dbm);
+    U8String SetupHint() const;
+    static U8String SignalText(int dbm);
 
     // ---- state -----------------------------------------------------------
     pollux::Settings m_settings;
@@ -130,7 +130,7 @@ private:
     // Ticks left of reading the status every second, after something changed;
     // see kSettleTicks.
     int m_settleTicks = 0;
-    DString m_hint;
+    U8String m_hint;
     bool m_hintBad = false;
 
     // Header
@@ -147,7 +147,7 @@ private:
     std::vector<ui::ButtonHBox*> m_rowButtons;
 
     ui::VBox* m_pConnectBar = nullptr;      // rebuilt on selection change
-    DString   m_connectBarShape;            // what it was last built for
+    U8String   m_connectBarShape;            // what it was last built for
     ui::RichEdit* m_pPassword = nullptr;
     ui::Label* m_pPasswordLabel = nullptr;
     ui::Button* m_pShowButton = nullptr;      // reveal what was typed

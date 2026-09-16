@@ -9,8 +9,8 @@ class SettingsForm : public ui::WindowImplBase
 public:
     SettingsForm();
     virtual ~SettingsForm() override;
-    DString GetSkinFolder() override;
-    DString GetSkinFile() override;
+    U8String GetSkinFolder() override;
+    U8String GetSkinFile() override;
     void GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs) override;
     void OnInitWindow() override;
 

@@ -36,8 +36,8 @@ public:
     virtual ~PolluxOSForm() override;
 
     /** Resource-related interfaces: pure code mode, no layout XML is loaded. */
-    virtual DString GetSkinFolder() override;
-    virtual DString GetSkinFile() override;
+    virtual U8String GetSkinFolder() override;
+    virtual U8String GetSkinFile() override;
 
     /** Window creation attributes (fullscreen, no caption, no shadow). */
     virtual void GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs) override;

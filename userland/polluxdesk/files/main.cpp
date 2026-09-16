@@ -10,7 +10,7 @@
 class App : public ui::FrameworkThread
 {
 public:
-    App() : FrameworkThread(DUI_T("App"), ui::kThreadUI) {}
+    App() : FrameworkThread("App", ui::kThreadUI) {}
 
     /** The entry macro builds the process entry point around one instance. */
     static App& Instance()
@@ -24,7 +24,7 @@ public:
     int Run(int argc, char** argv)
     {
         if (argc > 1 && argv[1] != nullptr && argv[1][0] != '\0') {
-            m_startDir = DString(argv[1]);
+            m_startDir = U8String(argv[1]);
         }
         RunMessageLoop();
         return 0;
@@ -36,11 +36,11 @@ private:
         // All resources (global.xml, images, fonts, language files) are
         // embedded in the executable; no resource directory is needed.
         ui::GlobalManager::Instance().Startup(
-            ui::MemoryResParam(GetEmbeddedResourcesData(), GetEmbeddedResourcesSize()));
+            ui::MemoryResParam(EmbeddedResources()));
 
         FilesForm* window = new FilesForm();
         window->SetStartDir(m_startDir);
-        window->CreateWnd(nullptr, ui::WindowCreateParam(DUI_T("PolluxOS Files"), true));
+        window->CreateWnd(nullptr, ui::WindowCreateParam("PolluxOS Files", true));
         // Clicking the compositor's red traffic light sends an xdg close:
         // without this the window is destroyed but the process lingers
         // invisibly (the "traffic lights do not work" symptom).
@@ -53,7 +53,7 @@ private:
         ui::GlobalManager::Instance().Shutdown();
     }
 
-    DString m_startDir;   // empty means "start in the home directory"
+    U8String m_startDir;   // empty means "start in the home directory"
 };
 
 DUI_APP_ENTRY_ARGS(App)

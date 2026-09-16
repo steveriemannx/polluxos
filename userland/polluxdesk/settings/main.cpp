@@ -5,16 +5,16 @@
 class App : public ui::FrameworkThread
 {
 public:
-    App() : FrameworkThread(DUI_T("App"), ui::kThreadUI) {}
+    App() : FrameworkThread("App", ui::kThreadUI) {}
     void Run() { RunMessageLoop(); }
 
 private:
     void OnInit() override
     {
         ui::GlobalManager::Instance().Startup(
-            ui::MemoryResParam(GetEmbeddedResourcesData(), GetEmbeddedResourcesSize()));
+            ui::MemoryResParam(EmbeddedResources()));
         SettingsForm* window = new SettingsForm();
-        window->CreateWnd(nullptr, ui::WindowCreateParam(DUI_T("PolluxOS Settings"), true));
+        window->CreateWnd(nullptr, ui::WindowCreateParam("PolluxOS Settings", true));
         window->PostQuitMsgWhenClosed(true);
         window->ShowWindow(ui::kSW_SHOW_NORMAL);
     }
