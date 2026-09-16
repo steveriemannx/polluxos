@@ -1,0 +1,33 @@
+#!/bin/sh
+# The sibling session scripts sit next to this one.
+SCRIPTDIR="$(dirname "$0")"
+# Runs on ttyv0 after the greeter exits (user logged in). session-switch is
+# starting the real session (the PolluxOS compositor or Xorg/xfce). Stay
+# quiet here so no shell prompt flashes on screen. When the real session
+# appears, wait silently until it ends, then restart the greeter (back to
+# login). If no session shows up within the grace period (start failed), also
+# restart the greeter.
+is_session_up() {
+    pgrep -f "polluxdesk-compositor-desktop" >/dev/null 2>&1 || \
+        pgrep -x Xorg >/dev/null 2>&1
+}
+is_greeter_up() {
+    pgrep -f "polluxdesk-compositor-greeter" >/dev/null 2>&1
+}
+
+waited=0
+while true; do
+    if is_session_up; then
+        while is_session_up; do sleep 2; done
+        exec "$SCRIPTDIR/polluxdesk-compositor-greeter"
+    fi
+    if is_greeter_up; then
+        waited=0          # login screen showing; keep waiting for the login
+    else
+        waited=$((waited + 1))
+        if [ "$waited" -gt 12 ]; then   # greeter gone & no session in 12s -> start failed
+            exec "$SCRIPTDIR/polluxdesk-compositor-greeter"
+        fi
+    fi
+    sleep 1
+done

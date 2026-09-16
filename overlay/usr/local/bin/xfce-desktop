@@ -1,0 +1,4 @@
+#!/bin/sh
+# Xfce (X11) session: run startx (X server + Xfce) inside a session D-Bus so
+# Xfce components get their session bus.
+exec dbus-run-session -- startx /usr/local/bin/startxfce4

@@ -1,0 +1,37 @@
+#!/bin/sh
+# Leave the login screen's compositor before starting a session.
+#
+# The login client (launcher, built from the old galaxyos line) runs
+#     session-switch <session command>
+# and expects this to hand the display over.  Every name in it used to point
+# at the old galaxyos tree, which no longer exists, so none of the pkill or
+# pgrep calls matched anything: the greeter's compositor kept the DRM seat and
+# the session being started lost the race for it.  Starting the polluxdesk
+# compositor failed outright; Xfce only survived because Xorg is slow enough
+# to start that the greeter had cleaned up on its own by then.
+#
+# The names below are the polluxdesk ones, and the wait is real.
+
+# The greeter's TERM trap kills "its client" -- and if the login client exec'd
+# this script, that client is this very process.  Ignore TERM until the
+# handover is done, then restore the default so the session itself is not left
+# ignoring it.
+trap '' TERM HUP INT
+
+pkill -TERM -f "polluxdesk-compositor-greeter" 2>/dev/null || true
+pkill -TERM -x launcher 2>/dev/null || true
+pkill -TERM -f "polluxdesk-compositor" 2>/dev/null || true
+
+waited=0
+while pgrep -f "polluxdesk-compositor" >/dev/null 2>&1 && [ "$waited" -lt 100 ]; do
+    sleep 0.2
+    waited=$((waited + 1))
+done
+sleep 0.2
+
+# The greeter compositor is gone: clear its stale display variables so the new
+# session takes the real seat/tty (DRM) instead of trying to nest.
+unset WAYLAND_DISPLAY DISPLAY
+
+trap - TERM HUP INT
+exec "$@"

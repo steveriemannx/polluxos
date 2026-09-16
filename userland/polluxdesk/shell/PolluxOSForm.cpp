@@ -152,7 +152,7 @@ const PolluxOSForm::MenuItem PolluxOSForm::kAppMenu[] = {
     { "键盘快捷键",     nullptr, false, false },
     { nullptr,          nullptr, true, false },
     { "锁定屏幕",       nullptr, false, false },
-    { "退出登录",       "/home/shxu/.local/bin/session-logout", false, true },
+    { "退出登录",       "--logout", false, true },
     { "重新启动",       "shutdown -r now", false, true },
     { "关机",           "shutdown -p now", false, true },
 };
@@ -219,7 +219,7 @@ const PolluxOSForm::MenuItem PolluxOSForm::kQuickMenu[] = {
     { "应用菜单",       "wayst -e sh -c 'ls /usr/local/share/applications \"$HOME/.local/share/applications\" 2>/dev/null | sed s/.desktop// | head -40; read _'", false, true },
     { "系统设置",       "\"$HOME/projects-main/polluxos/build/polluxdesk/bin/polluxdesk_settings\"", false, true },
     { nullptr,          nullptr, true, false },
-    { "退出登录",       "/home/shxu/.local/bin/session-logout", false, true },
+    { "退出登录",       "--logout", false, true },
 };
 
 const int PolluxOSForm::kQuickMenuCount =
@@ -338,7 +338,9 @@ void PolluxOSForm::LaunchApp(const char* cmdline)
     // Logout swaps the shell client under the SAME compositor: start the
     // greeter first, then close this window. The greeter wrapper switches to
     // the new client, so the DRM output is never torn down (no flicker).
-    if (std::strcmp(cmdline, "/home/shxu/.local/bin/session-logout") == 0) {
+    // "--logout" is a sentinel, not a program: the launcher swap below is the
+    // whole logout, so there is no script to run for it.
+    if (std::strcmp(cmdline, "--logout") == 0) {
         const char* home = std::getenv("HOME");
         U8String launcher = U8String(home != nullptr ? home : "/home/shxu") +
                            "/projects-main/polluxos/build/polluxdesk/bin/launcher";

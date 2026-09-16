@@ -1,0 +1,111 @@
+#!/bin/sh
+# The desktop binaries may be installed (/usr/local/bin, the default) or come
+# from a development build tree, which the environment can name instead.
+BINDIR="${POLLUXDESK_BINDIR:-/usr/local/bin}"
+# PolluxOS desktop session: the wlroots compositor draws the wallpaper and
+# server-side macOS titlebars + shadows; the dui desktop shell is its startup
+# client and draws only the desktop UI (menu bar / dock).
+BIN="$BINDIR/polluxdesk-compositor"
+CLIENT="$BINDIR/polluxdesk"
+SESSION_PID_FILE="/tmp/polluxdesk-desktop-session.pid"
+# Guarantee a single dui shell surface: if a previous session leaked
+# a client (e.g. during a forced restart), stacked menu bars/docks
+# would be drawn by both clients at once.
+pkill -x polluxdesk 2>/dev/null || true
+# wlroots needs XDG_RUNTIME_DIR to create the Wayland socket. Login shells set
+# it, but session-switch may be invoked from a non-login SSH context, so make
+# sure it exists before the compositor starts.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run/xdg/${USER:-$(id -un)}}"
+mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
+chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
+
+# Sockets left behind by earlier sessions are matched by the discovery loop
+# below, and the client then connects to a dead socket and exits without a
+# word -- which the session runner reads as "client died at startup".  Clear
+# them so the compositor's own socket is the only one there.
+rm -f "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null || true
+export WLR_DRM_NO_ATOMIC=1
+export WLR_RENDERER_ALLOW_SOFTWARE=1
+# Never let a display variable inherited from the login shell make wlroots
+# select its Wayland backend and accidentally nest inside an old session.
+unset WAYLAND_DISPLAY DISPLAY
+
+# Prefer GLES2 on the real DRM backend (much faster redraws); fall back to
+# pixman if EGL/GBM is unavailable. The client is a sibling process and is
+# reaped when the compositor exits, preventing orphaned dui processes that
+# spin at 100% CPU after a session switch.
+run_session() {
+    renderer="$1"
+    # The previous renderer attempt exports WAYLAND_DISPLAY after discovering
+    # its socket. Clear it before every new compositor attempt, otherwise the
+    # pixman fallback can accidentally select the nested Wayland backend.
+    unset WAYLAND_DISPLAY DISPLAY
+    WLR_RENDERER="$renderer" dbus-run-session -- "$BIN" \
+        >"/tmp/polluxdesk-desktop.log" 2>&1 &
+    compositor_pid=$!
+    stop_compositor() {
+        pkill -TERM -P "$compositor_pid" 2>/dev/null || true
+        kill "$compositor_pid" 2>/dev/null || true
+    }
+
+    # Do not race the compositor startup.  A fixed sleep is unreliable on a
+    # cold boot, and the shell exits immediately if the Wayland socket is not
+    # ready yet, leaving only the compositor wallpaper visible.
+    wayland_socket=""
+    waited=0
+    while [ "$waited" -lt 100 ]; do
+        for socket in "$XDG_RUNTIME_DIR"/wayland-*; do
+            if [ -S "$socket" ]; then
+                wayland_socket="$socket"
+                break
+            fi
+        done
+        if [ -n "$wayland_socket" ]; then
+            break
+        fi
+        if ! kill -0 "$compositor_pid" 2>/dev/null; then
+            wait "$compositor_pid" 2>/dev/null || true
+            return 1
+        fi
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    if [ -z "$wayland_socket" ]; then
+        stop_compositor
+        wait "$compositor_pid" 2>/dev/null || true
+        return 1
+    fi
+
+    export WAYLAND_DISPLAY=${wayland_socket##*/}
+    "$CLIENT" >"/tmp/polluxdesk-desktop-client.log" 2>&1 &
+    client_pid=$!
+    trap 'rm -f "$SESSION_PID_FILE"; kill "$client_pid" 2>/dev/null; stop_compositor; exit 130' INT TERM HUP
+
+    # A client that dies during startup is a failed session, not a healthy
+    # compositor session.  Tear down and let the renderer fallback retry.
+    while kill -0 "$compositor_pid" 2>/dev/null; do
+        if ! kill -0 "$client_pid" 2>/dev/null; then
+            stop_compositor
+            wait "$compositor_pid" 2>/dev/null || true
+            wait "$client_pid" 2>/dev/null || true
+            return 1
+        fi
+        sleep 1
+    done
+    if wait "$compositor_pid"; then
+        rc=0
+    else
+        rc=$?
+    fi
+    kill "$client_pid" 2>/dev/null
+    wait "$client_pid" 2>/dev/null
+    rm -f "$SESSION_PID_FILE"
+    return "$rc"
+}
+
+printf '%s\n' "$$" > "$SESSION_PID_FILE"
+if run_session gles2; then
+    exit 0
+fi
+run_session pixman
+exit $?

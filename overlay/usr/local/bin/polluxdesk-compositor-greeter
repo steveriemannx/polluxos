@@ -1,0 +1,160 @@
+#!/bin/sh
+# The desktop binaries may be installed (/usr/local/bin, the default) or come
+# from a development build tree, which the environment can name instead.
+BINDIR="${POLLUXDESK_BINDIR:-/usr/local/bin}"
+# PolluxOS login session: the wlroots compositor runs the dui macOS-style
+# login screen as its startup client.
+BIN="$BINDIR/polluxdesk-compositor"
+CLIENT="$BINDIR/launcher"
+# Guarantee a single dui shell surface: if a previous session leaked
+# a client (e.g. during a forced restart), stacked menu bars/docks
+# would be drawn by both clients at once.
+pkill -x launcher 2>/dev/null || true
+# wlroots needs XDG_RUNTIME_DIR to create the Wayland socket.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run/xdg/${USER:-$(id -un)}}"
+mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
+chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
+
+# Sockets left behind by earlier sessions are matched by the discovery loop
+# below, and the client then connects to a dead socket and exits without a
+# word -- which the session runner reads as "client died at startup".  Clear
+# them so the compositor's own socket is the only one there.
+rm -f "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null || true
+export WLR_DRM_NO_ATOMIC=1
+
+# Test hook: when the marker file exists, let the compositor expose the
+# wlroots virtual-pointer protocol so an automated harness (wlrctl) can drive
+# the cursor while verifying the desktop's UI on this headless build host.
+# Off by default: with it enabled any client could move the pointer itself.
+if [ -e "$HOME/.config/polluxdesk/virtual-input" ]; then
+    POLLUX_VIRTUAL_INPUT=1
+    export POLLUX_VIRTUAL_INPUT
+fi
+export WLR_RENDERER_ALLOW_SOFTWARE=1
+# The greeter owns the real DRM seat; inherited display variables must not
+# make wlroots start as a nested Wayland compositor after reboot.
+unset WAYLAND_DISPLAY DISPLAY
+
+# Prefer GLES2 on the real DRM backend (much faster redraws); fall back to
+# pixman if EGL/GBM is unavailable on this hardware. The client is launched as
+# a sibling process and is reaped when the compositor exits, so a dead session
+# can never leave an orphaned 100%-CPU dui process behind.
+run_session() {
+    renderer="$1"
+    # Do not leak the socket selected by a failed renderer attempt into the
+    # next attempt; that would make the fallback compositor nest on Wayland.
+    unset WAYLAND_DISPLAY DISPLAY
+    WLR_RENDERER="$renderer" dbus-run-session -- "$BIN" \
+        >"/tmp/polluxdesk-greeter.log" 2>&1 &
+    compositor_pid=$!
+    stop_compositor() {
+        pkill -TERM -P "$compositor_pid" 2>/dev/null || true
+        kill "$compositor_pid" 2>/dev/null || true
+    }
+
+    # Wait for the compositor's actual Wayland socket instead of guessing with
+    # a fixed delay.  On slow boots the old delay let the client exit before
+    # connecting, which produced a background-only session.
+    wayland_socket=""
+    waited=0
+    while [ "$waited" -lt 100 ]; do
+        for socket in "$XDG_RUNTIME_DIR"/wayland-*; do
+            if [ -S "$socket" ]; then
+                wayland_socket="$socket"
+                break
+            fi
+        done
+        if [ -n "$wayland_socket" ]; then
+            break
+        fi
+        if ! kill -0 "$compositor_pid" 2>/dev/null; then
+            wait "$compositor_pid" 2>/dev/null || true
+            return 1
+        fi
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    if [ -z "$wayland_socket" ]; then
+        stop_compositor
+        wait "$compositor_pid" 2>/dev/null || true
+        return 1
+    fi
+
+    export WAYLAND_DISPLAY=${wayland_socket##*/}
+    "$CLIENT" >"/tmp/polluxdesk-greeter-client.log" 2>&1 &
+    client_pid=$!
+    client_name=launcher
+    trap 'kill "$client_pid" 2>/dev/null; stop_compositor; exit 130' INT TERM HUP
+
+    # The compositor stays up across login/logout; only the shell client
+    # changes (launcher <-> polluxdesk). Switching clients avoids the DRM
+    # teardown + re-modeset that made both transitions flash repeatedly.
+    other_client() {
+        if [ "$client_name" = "launcher" ]; then
+            pgrep -x polluxdesk 2>/dev/null | head -1 || true
+        else
+            pgrep -x launcher 2>/dev/null | head -1 || true
+        fi
+    }
+
+    # If the current shell client exits, fail the attempt rather than leaving a
+    # compositor showing only its wallpaper and waiting forever for a dead
+    # client.
+    while kill -0 "$compositor_pid" 2>/dev/null; do
+        # The old client may take a short time to finish its close sequence
+        # after it starts the new one. Switch as soon as the other client
+        # appears so both surfaces are never visible at the same time.
+        next_pid="$(other_client)"
+        if [ -n "$next_pid" ] && [ "$next_pid" != "$client_pid" ] &&
+           kill -0 "$next_pid" 2>/dev/null; then
+            kill "$client_pid" 2>/dev/null || true
+            client_pid="$next_pid"
+            if [ "$client_name" = "launcher" ]; then
+                client_name=polluxdesk
+            else
+                client_name=launcher
+            fi
+        fi
+        if ! kill -0 "$client_pid" 2>/dev/null; then
+            # Adopt an already-running shell client instead of tearing down DRM.
+            adopted="$(pgrep -x launcher 2>/dev/null | head -1 || true)"
+            if [ -z "$adopted" ]; then
+                adopted="$(pgrep -x polluxdesk 2>/dev/null | head -1 || true)"
+            fi
+            if [ -n "$adopted" ] && kill -0 "$adopted" 2>/dev/null; then
+                client_pid="$adopted"
+                case "$(ps -o command= -p "$adopted" 2>/dev/null)" in
+                    *polluxdesk*) client_name=polluxdesk ;;
+                    *) client_name=launcher ;;
+                esac
+            else
+                # An external session (Xfce via session-switch) may be taking
+                # over the seat right now. Do NOT restart a compositor here -
+                # that would race Xorg for DRM. Hand control to wait-session.
+                if pgrep -f "session-switch" >/dev/null 2>&1 || \
+                   pgrep -x Xorg >/dev/null 2>&1; then
+                    exit 0
+                fi
+                stop_compositor
+                wait "$compositor_pid" 2>/dev/null || true
+                wait "$client_pid" 2>/dev/null || true
+                return 1
+            fi
+        fi
+        sleep 1
+    done
+    if wait "$compositor_pid"; then
+        rc=0
+    else
+        rc=$?
+    fi
+    kill "$client_pid" 2>/dev/null
+    wait "$client_pid" 2>/dev/null
+    return "$rc"
+}
+
+if run_session gles2; then
+    exit 0
+fi
+run_session pixman
+exit $?
