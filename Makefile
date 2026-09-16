@@ -38,21 +38,25 @@ kernel: world
 # ---- dui / polluxdesk (CMake) -------------------------------------------
 # dui needs CMake >= 4.0 and FreeBSD ports/package tree stops at 3.31, so prefer
 # a locally built cmake installed as `cmake4`.  Override with e.g.
-# make CMAKE=/path/to/cmake.  CMAKE_MAKE_PROGRAM is set to the make that runs
-# this file (bmake on FreeBSD), so no gmake is needed either.
+# make CMAKE=/path/to/cmake.
+#
+# CMake drives its own build files with the make below.  bmake is the same name on
+# FreeBSD (/usr/bin/bmake, the same binary as make) and on macOS (Homebrew), so no
+# gmake is needed; override it for another backend, e.g. make CMAKE_MAKE_PROGRAM=gmake
 CMAKE != command -v cmake4 2>/dev/null || echo cmake
+CMAKE_MAKE_PROGRAM ?= bmake
 
 dui:
 	$(CMAKE) -S userland/dui -B $(BUILD)/dui -DCMAKE_BUILD_TYPE=Release \
 	    -DDUI_ENABLE_WAYLAND=ON -DDUI_ENABLE_SDL=OFF \
-	    -DDUI_BUILD_EXAMPLES=OFF -DCMAKE_MAKE_PROGRAM=$(MAKE)
+	    -DDUI_BUILD_EXAMPLES=OFF -DCMAKE_MAKE_PROGRAM=$(CMAKE_MAKE_PROGRAM)
 	$(CMAKE) --build $(BUILD)/dui -j$(JOBS)
 	$(CMAKE) --install $(BUILD)/dui --prefix $(PREFIX)
 
 userland: dui
 	$(CMAKE) -S userland/polluxdesk -B $(BUILD)/polluxdesk -DCMAKE_BUILD_TYPE=Release \
 	    -DCMAKE_PREFIX_PATH=$(PREFIX) -DDUI_ROOT=$(PREFIX) \
-	    -DDUI_ENABLE_WAYLAND=ON -DCMAKE_MAKE_PROGRAM=$(MAKE)
+	    -DDUI_ENABLE_WAYLAND=ON -DCMAKE_MAKE_PROGRAM=$(CMAKE_MAKE_PROGRAM)
 	$(CMAKE) --build $(BUILD)/polluxdesk -j$(JOBS)
 	$(CMAKE) --install $(BUILD)/polluxdesk --prefix $(PREFIX)
 
