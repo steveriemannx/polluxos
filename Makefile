@@ -1,8 +1,8 @@
 # PolluxOS 顶层总控 —— 注意: 各子系统的构建系统保持官方原样:
 #   FreeBSD base: bmake  base/freebsd-src/
 #   dui/polluxdesk: CMake  userland/
-# 本 Makefile 只做调度与编排。用 bmake（FreeBSD 自带）；macOS 上需另装 bmake。
-# 运行环境: FreeBSD(构建 world/kernel 必须在 FreeBSD 上)。
+# 本 Makefile 只做调度与编排，且只在 FreeBSD 上跑（world/kernel 也必须在 FreeBSD 上），
+# 所以用系统自带的 bmake，不需要 gmake。dui/polluxdesk 那层由 CMake 驱动。
 
 ROOT      ?= ${.CURDIR}
 BUILD     ?= $(ROOT)/build
