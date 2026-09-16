@@ -1,5 +1,5 @@
 #include "ActivityForm.h"
-#include "embedded_resources.inc"  // Build-time embedded resources
+#include "PolluxTheme.h"
 #include "dui/Utils/AppEntry.h"
 
 /** App: FrameworkThread subclass that serves as the DUI_APP_ENTRY target.
@@ -20,7 +20,7 @@ private:
         // All resources (global.xml, images, fonts, language files) are
         // embedded in the executable; no resource directory is needed.
         ui::GlobalManager::Instance().Startup(
-            ui::MemoryResParam(EmbeddedResources()));
+            PolluxResParam());
 
         ActivityForm* window = new ActivityForm();
         window->CreateWnd(nullptr, ui::WindowCreateParam("活动监视器", true));

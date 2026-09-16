@@ -7,6 +7,10 @@ project(polluxdesk_activity CXX)
 get_filename_component(DUI_SRC_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/../../dui/" ABSOLUTE)
 
 set(EMBED_RES_DIR "${DUI_ROOT}/resources")
+# Embed only the desktop's own theme. The platform themes, and the default theme
+# a partial theme would otherwise fall back to, are not packaged at all: a
+# missing resource must be visible, not quietly taken from another theme.
+set(EMBED_RES_PATHS themes/polluxos fonts lang)
 include("${DUI_SRC_ROOT_DIR}/cmake/dui_embed_res.cmake")
 # PolluxOS headers shared by the components (PolluxPaths.h, PolluxSettings.h).
 include_directories("${CMAKE_CURRENT_LIST_DIR}/../common")

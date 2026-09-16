@@ -1,5 +1,5 @@
 #include "FilesForm.h"
-#include "embedded_resources.inc"  // Build-time embedded resources
+#include "PolluxTheme.h"
 #include "dui/Utils/AppEntry.h"
 
 /** App: FrameworkThread subclass that serves as the DUI_APP_ENTRY_ARGS
@@ -36,7 +36,7 @@ private:
         // All resources (global.xml, images, fonts, language files) are
         // embedded in the executable; no resource directory is needed.
         ui::GlobalManager::Instance().Startup(
-            ui::MemoryResParam(EmbeddedResources()));
+            PolluxResParam());
 
         FilesForm* window = new FilesForm();
         window->SetStartDir(m_startDir);

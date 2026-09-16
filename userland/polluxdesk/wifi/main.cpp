@@ -1,5 +1,5 @@
 #include "WifiForm.h"
-#include "embedded_resources.inc"  // Build-time embedded resources
+#include "PolluxTheme.h"
 #include "dui/Utils/AppEntry.h"
 
 /** App: FrameworkThread subclass that serves as the DUI_APP_ENTRY_ARGS
@@ -37,7 +37,7 @@ private:
         // All resources (global.xml, images, fonts, language files) are
         // embedded in the executable; no resource directory is needed.
         ui::GlobalManager::Instance().Startup(
-            ui::MemoryResParam(EmbeddedResources()));
+            PolluxResParam());
 
         WifiForm* window = new WifiForm(std::string(m_preselectSsid.c_str()));
         window->CreateWnd(nullptr, ui::WindowCreateParam("Wi-Fi", true));

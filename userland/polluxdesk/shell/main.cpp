@@ -1,6 +1,6 @@
 #include "dui/dui.h"
+#include "PolluxTheme.h"
 #include "PolluxOSForm.h"
-#include "embedded_resources.inc"  // Build-time embedded resources
 #include "dui/Utils/AppEntry.h"
 
 /** App: FrameworkThread subclass that serves as the DUI_APP_ENTRY target.
@@ -20,7 +20,7 @@ private:
         // the executable and accessed directly from memory; no resource directory
         // is needed at runtime.
         ui::GlobalManager::Instance().Startup(
-            ui::MemoryResParam(EmbeddedResources()));
+            PolluxResParam());
 
         PolluxOSForm* window = new PolluxOSForm();
         window->CreateWnd(nullptr, ui::WindowCreateParam("PolluxOS Desktop", true));

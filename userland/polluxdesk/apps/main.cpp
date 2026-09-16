@@ -1,5 +1,5 @@
 #include "LaunchPadForm.h"
-#include "embedded_resources.inc"
+#include "PolluxTheme.h"
 #include "dui/Utils/AppEntry.h"
 
 class App : public ui::FrameworkThread
@@ -12,7 +12,7 @@ private:
     void OnInit() override
     {
         ui::GlobalManager::Instance().Startup(
-            ui::MemoryResParam(EmbeddedResources()));
+            PolluxResParam());
         LaunchPadForm* window = new LaunchPadForm();
         window->CreateWnd(nullptr,
             ui::WindowCreateParam("PolluxOS Launchpad", true));
