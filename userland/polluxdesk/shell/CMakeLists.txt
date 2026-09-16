@@ -2,9 +2,8 @@ cmake_minimum_required(VERSION 3.18)
 
 project(polluxdesk CXX)
 
-# Per-executable source dir the dui helpers glob; the rest of the dui machinery
-# (dependency setup, Skia) is already configured once by the top-level file.
-get_filename_component(DUI_PROJECT_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/" ABSOLUTE)
+# The rest of the dui machinery (dependency setup, Skia) is already configured
+# once by the top-level file.
 get_filename_component(DUI_SRC_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/../../dui/" ABSOLUTE)
 
 set(EMBED_RES_DIR "${DUI_ROOT}/resources")
@@ -15,8 +14,15 @@ include_directories("${CMAKE_CURRENT_LIST_DIR}/../common")
 # it too, so the panel and the window can never disagree about the networks.
 include_directories("${CMAKE_CURRENT_LIST_DIR}/../wifi")
 
-include("${DUI_SRC_ROOT_DIR}/cmake/dui_bin.cmake")
+include("${DUI_SRC_ROOT_DIR}/cmake/dui_app.cmake")
 
-# Joined into the shell target after dui_bin.cmake created it -- the glob in
-# there would drop anything added to SRC_FILES before the include.
-target_sources(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../wifi/WifiData.cpp")
+# The application owns its target: sources are listed, not globbed, and
+# dui::app carries the C++20 standard and the Skia usage requirements.
+add_executable(${PROJECT_NAME}
+    LaunchPadForm.cpp
+    PolluxOSForm.cpp
+    main.cpp
+    ../wifi/WifiData.cpp
+)
+target_link_libraries(${PROJECT_NAME} PRIVATE dui::app)
+dui_finalize_app(${PROJECT_NAME})
