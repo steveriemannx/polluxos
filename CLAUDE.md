@@ -5,7 +5,7 @@
 PolluxOS is a desktop operating system built on **FreeBSD 15.0-STABLE** with **dui**
 (a C++ GUI library: XML-described layout + Skia rendering) as its GUI framework.
 dui talks to the display stack directly via its **native Wayland backend**
-(`-DDUI_ENABLE_WAYLAND=ON -DDUI_ENABLE_SDL=OFF`); SDL is deliberately not used.
+(`-DDUI_ENABLE_WAYLAND=ON`).
 
 Boot flow: kernel (vt/efifb or DRM) → init → Wayland compositor (weston/sway) →
 **polluxdesk**, the dui-based desktop shell (taskbar/launcher, XML layouts under
@@ -19,7 +19,7 @@ FAT EFI partition with loader.efi + UFS2 rootfs). No installer yet.
 | Component | Build system | Notes |
 | :--- | :--- | :--- |
 | `base/freebsd-src/` (submodule) | **bmake** | `make buildworld/buildkernel`, KERNCONF, src.conf |
-| `userland/dui/` (submodule, URL TBD) | **CMake** | Wayland backend enabled, SDL disabled |
+| `userland/dui/` (submodule) | **CMake** | Native Wayland backend enabled |
 | `userland/polluxdesk/` | **CMake** | Links against installed dui under `build/prefix` |
 | top-level `Makefile` | plain make | Orchestration only; never reimplements the above |
 

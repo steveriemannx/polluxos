@@ -60,7 +60,7 @@ BACKEND =
 
 dui:
 	$(CMAKE) -S userland/dui -G "$(GENERATOR)" -B $(BUILD)/dui -DCMAKE_BUILD_TYPE=Release \
-	    -DDUI_ENABLE_WAYLAND=ON -DDUI_ENABLE_SDL=OFF \
+	    -DDUI_ENABLE_WAYLAND=ON \
 	    -DDUI_BUILD_EXAMPLES=OFF $(BACKEND)
 	$(CMAKE) --build $(BUILD)/dui -j$(JOBS)
 	$(CMAKE) --install $(BUILD)/dui --prefix $(PREFIX)

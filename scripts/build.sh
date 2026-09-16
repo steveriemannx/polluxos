@@ -42,7 +42,7 @@ env MAKEOBJDIRPREFIX="$OBJPREFIX" \
 # 3. dui + polluxdesk (cmake)，安装到统一 PREFIX/前缀树
 cmake -S userland/dui -B "$BUILD/dui" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DDUI_ENABLE_WAYLAND=ON -DDUI_ENABLE_SDL=OFF
+    -DDUI_ENABLE_WAYLAND=ON
 cmake --build "$BUILD/dui" -j "$JOBS"
 cmake --install "$BUILD/dui" --prefix "$PREFIX"
 

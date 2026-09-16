@@ -3,8 +3,7 @@
 PolluxOS is a new operating system built on **FreeBSD 15.0-STABLE** with **dui**
 (a cross-platform C++ UI library using XML-described layout + Skia rendering)
 as its GUI framework. dui connects to the display stack through its native
-**Wayland backend** (`-DDUI_ENABLE_WAYLAND=ON -DDUI_ENABLE_SDL=OFF`) — SDL is
-not used.
+**Wayland backend** (`-DDUI_ENABLE_WAYLAND=ON`).
 
 The goal is a dd-able UEFI image: write `build/polluxos.img` to a USB stick or
 disk and boot straight into the polluxdesk desktop shell (taskbar, launcher,
@@ -80,8 +79,7 @@ kernel (vt + efifb/drm) ──► /dev/dri KMS ──► mesa/EGL ──► dui 
 ```
 
 - The FreeBSD kernel provides KMS/DRM and vt(4); the userland Wayland stack
-  comes from ports/pkg; dui builds with `-DDUI_ENABLE_WAYLAND=ON
-  -DDUI_ENABLE_SDL=OFF`.
+  comes from ports/pkg; dui builds with `-DDUI_ENABLE_WAYLAND=ON`.
 - The image is GPT (FAT EFI partition with loader.efi + UFS2 rootfs): dd it and
   boot. No installer yet — a minimal "pick a disk, gpart + dd" installer can be
   written later if needed.
