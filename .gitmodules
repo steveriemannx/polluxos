@@ -4,5 +4,5 @@
 	url = https://github.com/freebsd/freebsd-src
 [submodule "userland/dui"]
 	path = userland/dui
-	url = ssh://shxu@192.168.137.184/~/projects-main/dui-dev
+	url = https://github.com/steveriemannx/dui.git
 	branch = dev-polluxos
