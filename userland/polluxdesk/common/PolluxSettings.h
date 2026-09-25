@@ -44,14 +44,14 @@ inline constexpr const char* kWallpapers[] = { "blue", "purple", "dark", "green"
 // Icon sizes the dock is laid out for.  Anything else in the file is clamped
 // to the nearest of these, so a hand-edited value cannot produce a dock whose
 // hit targets and drawing disagree.
-inline constexpr int kDockIconSizes[] = { 44, 56, 64 };
+inline constexpr int kDockIconSizes[] = { 36, 44, 56 };
 
 struct Settings {
     std::string wallpaper    = "blue";
     std::string resolution;                    // "WxH"; empty leaves it alone
     std::string appearance   = "light";
     std::string accent       = "blue";
-    int         dockIconPx   = 56;
+    int         dockIconPx   = 36;
     std::string dockPosition = "bottom";       // bottom | left | right
 };
 

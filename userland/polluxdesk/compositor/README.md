@@ -18,15 +18,17 @@ wl_display (wayland-server)
             ├── titlebar rect      # compositor-drawn (macOS/Windows style)
             │   ├── red close button
             │   ├── yellow minimize button
-            │   └── green maximize button
+            │   └── green fullscreen button
             └── content tree       # client surface only
 ```
 
 - xdg-decoration mode is forced to `SERVER_SIDE`: applications never draw their
   own titlebar, they only draw content.
 - Clicking a titlebar drags the window; dragging the four edges or corners
-  resizes it; traffic lights close / minimize (scratchpad) / maximize the
-  window.
+  resizes it; traffic lights close / minimize (scratchpad) / fullscreen the
+  window. F11 toggles fullscreen and Alt+F10 toggles maximize.
+- Fullscreen covers the dock. Moving the pointer to the top edge reveals the
+  desktop menu bar and the application's traffic lights; moving away hides them.
 - The dui desktop shell is recognized by its Wayland title
   (`PolluxOS Desktop`) and is kept borderless behind every app window.
 - `Alt+Tab` cycles windows and restores minimized ones.

@@ -37,7 +37,6 @@ struct Palette
     U8String menuPanelBg;    // frosted dropdown panel
     U8String menuPanelLine;
     U8String menuItemHot;
-    U8String dockBg;         // frosted dock
     U8String dockBorder;
     U8String dockSeparator;  // hairline before the trash
     U8String dockDot;        // running-application indicator
@@ -92,8 +91,7 @@ void BuildPalette(const pollux::Settings& settings)
         g_pal.barBorder    = "#26FFFFFF";
         g_pal.menuPanelBg  = "#F21C1C1E";
         g_pal.menuPanelLine= "#26FFFFFF";
-        g_pal.dockBg       = "#B81C1C1E";
-        g_pal.dockBorder   = "#2EFFFFFF";
+        g_pal.dockBorder   = "#66FFFFFF";
         g_pal.dockSeparator= "#59FFFFFF";
         g_pal.dockDot      = "#B3FFFFFF";
         g_pal.chipBg       = "#26FFFFFF";
@@ -106,8 +104,7 @@ void BuildPalette(const pollux::Settings& settings)
         g_pal.barBorder    = "#33000000";
         g_pal.menuPanelBg  = "#F5FFFFFF";
         g_pal.menuPanelLine= "#33000000";
-        g_pal.dockBg       = "#C9FFFFFF";
-        g_pal.dockBorder   = "#59FFFFFF";
+        g_pal.dockBorder   = "#A0C7E8FF";
         g_pal.dockSeparator= "#3D000000";
         g_pal.dockDot      = "#99000000";
         g_pal.chipBg       = "#1A000000";
@@ -260,7 +257,10 @@ const RunningIcon kRunningIcons[] = {
 const int kRunningIconCount =
     static_cast<int>(sizeof(kRunningIcons) / sizeof(kRunningIcons[0]));
 
-PolluxOSForm::PolluxOSForm()
+PolluxOSForm::PolluxOSForm(bool dockOverlay, PolluxOSForm* desktopOwner,
+                           bool menuOverlay)
+    : m_dockOverlay(dockOverlay), m_desktopOwner(desktopOwner),
+      m_menuOverlay(menuOverlay)
 {
     // Dock-launched apps are forked and never waited on; ignore SIGCHLD so
     // exited children are auto-reaped instead of accumulating as zombies.
@@ -286,11 +286,99 @@ U8String PolluxOSForm::GetSkinFile()
     return "";
 }
 
+void PolluxOSForm::SetCompositorMenuOpen(bool open, int menuHeight)
+{
+    if (m_dockOverlay) {
+        m_dockMenuOpen = open;
+        SetDockCompositorTitle();
+    } else if (m_menuOverlay) {
+        if (open) {
+            SetText("PolluxOS MenuBar (menu:" + Num(menuHeight) + ")");
+        } else {
+            SetText("PolluxOS MenuBar");
+        }
+    } else {
+        SetText(open ? "PolluxOS Desktop (menu)" : "PolluxOS Desktop");
+    }
+}
+
+void PolluxOSForm::SetDockCompositorTitle()
+{
+    if (!m_dockOverlay) {
+        return;
+    }
+    if (m_dockHitAreaValid) {
+        SetText(ui::StringUtil::Printf(
+            "PolluxOS Dock (area:%d,%d,%d,%d,%d;menu:%d)",
+            m_dockHitArea.left, m_dockHitArea.top,
+            m_dockHitArea.Width(), m_dockHitArea.Height(), m_dockHitRadius,
+            m_dockMenuOpen ? 1 : 0));
+    } else {
+        SetText(m_dockMenuOpen ? "PolluxOS Dock (menu)" : "PolluxOS Dock");
+    }
+}
+
+void PolluxOSForm::UpdateDockHitArea()
+{
+    if (!m_dockOverlay || m_pDockBar == nullptr) {
+        return;
+    }
+    // GetRect() is in window-client coordinates, which for the fullscreen
+    // dock toplevel are also compositor output coordinates. Restrict the
+    // dock's hit region to its actual frosted bar, not the full bottom band.
+    const ui::UiRect rc = m_pDockBar->GetRect();
+    if (rc.IsEmpty()) {
+        return;
+    }
+    const int iconPx = pollux::DockIconPx(m_settings);
+    const int cornerRadius = iconPx * 18 / 56;
+    if (m_dockHitAreaValid && rc.left == m_dockHitArea.left &&
+            rc.top == m_dockHitArea.top && rc.right == m_dockHitArea.right &&
+            rc.bottom == m_dockHitArea.bottom &&
+            cornerRadius == m_dockHitRadius) {
+        // The layout may have repositioned floating run indicators without
+        // changing the dock's outer rectangle; align them below each icon too.
+    } else {
+        m_dockHitArea = rc;
+        m_dockHitRadius = cornerRadius;
+        m_dockHitAreaValid = true;
+        SetDockCompositorTitle();
+    }
+    const int dotSize = std::max(3, iconPx / 14);
+    for (size_t i = 0; i < m_dockDots.size() &&
+            i < m_dockDotAnchors.size(); ++i) {
+        ui::Control* dot = m_dockDots[i];
+        ui::Control* anchor = m_dockDotAnchors[i];
+        if (dot == nullptr || anchor == nullptr || anchor->GetRect().IsEmpty()) {
+            continue;
+        }
+        const ui::UiRect icon = anchor->GetRect();
+        const int x = (icon.left + icon.right - dotSize) / 2;
+        const int y = m_dockHitArea.bottom - 6 + (6 - dotSize) / 2;
+        const ui::UiRect current = dot->GetRect();
+        if (current.left != x || current.top != y ||
+                current.right != x + dotSize || current.bottom != y + dotSize) {
+            dot->SetPos(ui::UiRect(x, y, x + dotSize, y + dotSize));
+        }
+    }
+}
+
+void PolluxOSForm::RequestRestoreWindow(unsigned long id)
+{
+    PolluxOSForm* target = (m_dockOverlay || m_menuOverlay) &&
+                           m_desktopOwner != nullptr
+                               ? m_desktopOwner
+                               : this;
+    target->SetText(ui::StringUtil::Printf(
+        "PolluxOS Desktop (restore:%lu)", id));
+    target->m_titleMarkerPending = true;
+}
+
 void PolluxOSForm::GetCreateWindowAttributes(ui::WindowCreateAttributes& attrs)
 {
     attrs.m_bInitSizeDefined = true;
     attrs.m_szInitSize.cx = 1280;
-    attrs.m_szInitSize.cy = 800;
+    attrs.m_szInitSize.cy = m_menuOverlay ? 30 : 800;
     attrs.m_bShadowAttached = false;
     attrs.m_bShadowAttachedDefined = true;
     attrs.m_bIsLayeredWindow = true;
@@ -311,9 +399,11 @@ void PolluxOSForm::OnInitWindow()
     // Thumbnails are named after window pointers, so a stale one from an
     // earlier session could be shown against an unrelated window. Start
     // clean; live windows re-grab as they are minimized.
-    const std::string thumbClean =
-        "rm -f '" + pollux::ThumbDir() + "'/*.png 2>/dev/null";
-    pollux::Run(thumbClean.c_str());
+    if (!m_dockOverlay && !m_menuOverlay) {
+        const std::string thumbClean =
+            "rm -f '" + pollux::ThumbDir() + "'/*.png 2>/dev/null";
+        pollux::Run(thumbClean.c_str());
+    }
     m_settings = pollux::Load();
     m_settingsMtime = pollux::MtimeNs(pollux::ConfigPath());
     ApplyAppearance();
@@ -431,7 +521,7 @@ void PolluxOSForm::HideMenuPanel()
     m_openMenuIndex = -1;
     // Notify the compositor that the desktop dropdown is closed; it lowers the
     // shell back behind app windows and restores normal app interaction.
-    SetText("PolluxOS Desktop");
+    SetCompositorMenuOpen(false);
 }
 
 void PolluxOSForm::ToggleMenu(int menuIndex)
@@ -548,7 +638,7 @@ void PolluxOSForm::ShowMenuPanel(const MenuItem* items, int count, int x, int y)
     m_pMenuPanel->SetVisible(true);
     // Signal the compositor that a desktop dropdown is open so it can raise
     // the shell above app windows for the duration of the menu.
-    SetText("PolluxOS Desktop (menu)");
+    SetCompositorMenuOpen(true, py + panelHeight + 8);
     Invalidate(m_pMenuPanel->GetPos());
 }
 
@@ -690,9 +780,18 @@ void PolluxOSForm::BuildUi()
     pRoot->SetAttribute("border_size", "0");
     pRoot->SetAttribute("padding", "0,0,0,0");
 
-    BuildMenuBar(pRoot);
-    BuildDesktopArea(pRoot);
-    BuildDock(pRoot);
+    if (m_menuOverlay) {
+        // Keep the menu in its own short surface so fullscreen apps remain
+        // visible underneath it when the compositor reveals the top edge.
+        BuildMenuBar(pRoot);
+    } else if (m_dockOverlay) {
+        // The desktop shell is opaque on some Skia/Wayland buffer paths, so
+        // keep the dock in its own transparent, always-on-top toplevel.
+        BuildDesktopArea(pRoot);
+        BuildDock(pRoot);
+    } else {
+        BuildDesktopArea(pRoot);
+    }
 
     // Native in-window dropdown panel (shared by the desktop right-click
     // quick menu). It is created once, rebuilt per menu and positioned at the
@@ -752,6 +851,8 @@ void PolluxOSForm::RebuildUi()
     // it is dangling the moment BuildUi() runs again. Drop them first; the
     // ones BuildUi() and BuildDock() recreate are reassigned there.
     m_pMenuPanel = nullptr;
+    m_pDockBar = nullptr;
+    m_dockHitAreaValid = false;
     m_pAppButton = nullptr;
     for (int i = 0; i < kMenuButtonCount; ++i) {
         m_menuButtons[i] = nullptr;
@@ -760,6 +861,7 @@ void PolluxOSForm::RebuildUi()
     m_pDesktopClockLabel = nullptr;
     m_pDesktopDateLabel = nullptr;
     m_dockDots.clear();
+    m_dockDotAnchors.clear();
     m_minimizedSlots.clear();
     m_minimizedIds.clear();
 
@@ -773,7 +875,7 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     pTopBar->SetBkColor(g_pal.barBg);
     pTopBar->SetBorderColor(g_pal.barBorder);
     pTopBar->SetAttribute("bottom_border_size", "1");
-    pTopBar->SetAttribute("padding", "12,0,12,0");
+    pTopBar->SetAttribute("padding", "12,0,6,0");
     pRoot->AddItem(pTopBar);
     m_pMenuBar = pTopBar;
 
@@ -783,7 +885,7 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     m_pAppButton = pAppButton;
     pAppButton->SetAttribute("font", "system_bold_14");
     pAppButton->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
-    pAppButton->SetAttribute("text_align", "left,vcenter");
+    pAppButton->SetAttribute("text_align", "hcenter,vcenter");
     pAppButton->SetAttribute("height", "24");
     pAppButton->SetAttribute("width", "auto");
     pAppButton->SetAttribute("margin", "0,3,4,3");
@@ -793,10 +895,9 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     pAppButton->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
     pAppButton->SetStateColorRound(ui::kControlStateHot, ui::UiSize(5, 5), false);
     pAppButton->SetAttribute("cursor_type", "hand");
-    // macOS behavior: merely hovering the menu-bar title pops its menu open,
-    // no click needed (click still works as a toggle).
+    // Hover switches menus only after a click has entered menu tracking.
     pAppButton->AttachMouseEnter([this, pAppButton](const ui::EventArgs& /*args*/) {
-        if (m_pMenuPanel == nullptr || !m_pMenuPanel->IsVisible() ||
+        if (m_pMenuPanel != nullptr && m_pMenuPanel->IsVisible() &&
             m_openMenuIndex != -1) {
             HideMenuPanel();
             ui::UiRect rc = pAppButton->GetRect();
@@ -806,6 +907,11 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
         return true;
     });
     pAppButton->AttachClick([this, pAppButton](const ui::EventArgs& /*args*/) {
+        if (m_pMenuPanel != nullptr && m_pMenuPanel->IsVisible() &&
+            m_openMenuIndex == -1) {
+            HideMenuPanel();
+            return true;
+        }
         HideMenuPanel();
         ui::UiRect rc = pAppButton->GetRect();
         ShowMenuPanel(kAppMenu, kMenuBarMenuCounts[0],
@@ -820,7 +926,7 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
         pBtn->SetText(kMenuButtonText[mi]);
         pBtn->SetAttribute("font", "system_14");
         pBtn->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
-        pBtn->SetAttribute("text_align", "left,vcenter");
+        pBtn->SetAttribute("text_align", "hcenter,vcenter");
         pBtn->SetAttribute("height", "24");
         pBtn->SetAttribute("width", "auto");
         pBtn->SetAttribute("margin", "0,3,2,3");
@@ -830,13 +936,11 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
         pBtn->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
         pBtn->SetStateColorRound(ui::kControlStateHot, ui::UiSize(5, 5), false);
         pBtn->SetAttribute("cursor_type", "hand");
-        // Hover-to-open: moving the pointer across the menu bar pops each
-        // dropdown without a click (macOS-style menu tracking).
+        // Once a click opens a menu, moving across the menu bar switches the
+        // active dropdown; idle hovering never opens one.
         pBtn->AttachMouseEnter([this, mi](const ui::EventArgs& /*args*/) {
-            const bool alreadyOpen = m_pMenuPanel != nullptr &&
-                                     m_pMenuPanel->IsVisible() &&
-                                     m_openMenuIndex == mi;
-            if (!alreadyOpen) {
+            if (m_pMenuPanel != nullptr && m_pMenuPanel->IsVisible() &&
+                    m_openMenuIndex != mi) {
                 ToggleMenu(mi);
             }
             return true;
@@ -858,14 +962,16 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     // Status glyphs, as macOS has them: small monochrome icons rather than
     // words. dui cannot tint an SVG, so each ships in a light and a dark
     // version and the palette says which to load.
-    auto AddStatusGlyph = [this, pTopBar](const char* glyph) {
+    auto AddStatusGlyph = [this, pTopBar](const char* glyph,
+                                          int buttonWidth, int imageWidth) {
         ui::Button* pButton = new ui::Button(this);
-        pButton->SetAttribute("width", "38");
+        pButton->SetAttribute("width", Num(buttonWidth));
         pButton->SetAttribute("height", "24");
         pButton->SetAttribute("cursor_type", "hand");
         pButton->SetBkImage(U8String("file='polluxdesk/icons/status_") + glyph +
                             "_" + g_pal.glyphVariant +
-                            ".svg' width='30' height='19' halign='center' valign='center'");
+                            ".svg' width='" + Num(imageWidth) +
+                            "' height='19' halign='center' valign='center'");
         pButton->SetStateColor(ui::kControlStateNormal, g_pal.transparent);
         pButton->SetStateColor(ui::kControlStateHot, g_pal.barHot);
         pButton->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
@@ -877,9 +983,9 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
 
     // The status items are buttons, not decoration: each one opens a panel of
     // real controls, as on macOS.
-    ui::Button* pWifi = AddStatusGlyph("wifi");
-    ui::Button* pVolume = AddStatusGlyph("volume");
-    ui::Button* pBattery = AddStatusGlyph("battery");
+    ui::Button* pWifi = AddStatusGlyph("wifi", 30, 22);
+    ui::Button* pVolume = AddStatusGlyph("volume", 38, 30);
+    ui::Button* pBattery = AddStatusGlyph("battery", 38, 30);
     // Each handler opens its panel directly rather than through a shared
     // helper: the click callbacks outlive this function, so anything they
     // captured by reference would dangle the moment it returned.
@@ -907,7 +1013,7 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     m_pBatteryLabel = new ui::Label(this);
     m_pBatteryLabel->SetAttribute("font", "system_12");
     m_pBatteryLabel->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
-    m_pBatteryLabel->SetAttribute("text_align", "left,vcenter");
+    m_pBatteryLabel->SetAttribute("text_align", "hcenter,vcenter");
     m_pBatteryLabel->SetAttribute("width", "42");
     m_pBatteryLabel->SetAttribute("height", "24");
     m_pBatteryLabel->SetText("--%");
@@ -918,7 +1024,7 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
     // the compositor skips it deliberately so that clicking the wallpaper
     // does not steal the keyboard from the window in front -- so there is
     // nothing here that could receive typing. It opens the app grid instead.
-    ui::Button* pSearch = AddStatusGlyph("search");
+    ui::Button* pSearch = AddStatusGlyph("search", 38, 30);
     pSearch->SetToolTipText("打开启动台");
     pSearch->AttachClick([this](const ui::EventArgs&) {
         HideMenuPanel();
@@ -935,9 +1041,10 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
                               ".svg' width='27' height='17' halign='center' valign='center'");
     controlCenter->SetStateColor(ui::kControlStateNormal, g_pal.transparent);
     controlCenter->SetStateColor(ui::kControlStateHot, g_pal.barHot);
-    controlCenter->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(5, 5), false);
-    controlCenter->SetStateColorRound(ui::kControlStateHot, ui::UiSize(5, 5), false);
-    controlCenter->SetAttribute("border_round", "5,5");
+    controlCenter->SetStateColorRound(ui::kControlStateNormal, ui::UiSize(8, 8), false);
+    controlCenter->SetStateColorRound(ui::kControlStateHot, ui::UiSize(8, 8), false);
+    controlCenter->SetStateColorRound(ui::kControlStatePushed, ui::UiSize(8, 8), false);
+    controlCenter->SetAttribute("border_round", "8,8");
     controlCenter->SetAttribute("cursor_type", "hand");
     controlCenter->SetToolTipText("控制中心");
     controlCenter->AttachClick([this, controlCenter](const ui::EventArgs&) {
@@ -950,11 +1057,12 @@ void PolluxOSForm::BuildMenuBar(ui::VBox* pRoot)
 
     // The clock is last, at the very right edge, as on macOS.
     m_pClockLabel = new ui::Label(this);
-    m_pClockLabel->SetAttribute("font", "system_12");
+    m_pClockLabel->SetAttribute("font", "system_14");
     m_pClockLabel->SetStateTextColor(ui::kControlStateNormal, g_pal.textDark);
-    m_pClockLabel->SetAttribute("text_align", "right,vcenter");
-    m_pClockLabel->SetAttribute("width", "160");
-    m_pClockLabel->SetAttribute("margin", "0,0,8,0");
+    m_pClockLabel->SetAttribute("text_align", "hcenter,vcenter");
+    m_pClockLabel->SetAttribute("width", "200");
+    m_pClockLabel->SetAttribute("height", "24");
+    m_pClockLabel->SetAttribute("margin", "0,3,0,3");
     m_pClockLabel->SetText("--月--日 周- --:--");
     m_pClockLabel->SetMouseEnabled(false);
     pTopBar->AddItem(m_pClockLabel);
@@ -1500,7 +1608,7 @@ void PolluxOSForm::ShowPopover(int x, int y, int width,
     m_pMenuPanel->SetPaintOrder(100);
     m_pMenuPanel->SetVisible(true);
     // Raise the shell above app windows for as long as the panel is open.
-    SetText("PolluxOS Desktop (menu)");
+    SetCompositorMenuOpen(true, py + height + 8);
     Invalidate(m_pMenuPanel->GetPos());
 }
 
@@ -1908,44 +2016,39 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
 {
     // Everything is derived from the configured icon size so the bar, the
     // tiles and their corners stay in proportion; the divisors are chosen so
-    // the 56px default reproduces the original hard-coded design.
+    // the 36px default keeps the compact dock balanced.
     const int iconPx     = pollux::DockIconPx(m_settings);
-    const int barHeight  = iconPx + 20;        // 76 at the default
-    const int barRadius  = iconPx * 18 / 56;   // 18
-    const int iconGap    = iconPx * 4 / 56;    // 4
-    const int iconRadius = iconPx * 14 / 56;   // 14
-    const int svgSize    = iconPx * 48 / 56;   // 48
+    const int dotSize    = std::max(3, iconPx / 14);
+    const int barHeight  = iconPx + 12; // 48 at the default, with 6px top/bottom
+    const int barRadius  = iconPx * 18 / 56;   // 11 at the default
+    const int iconGap    = 6;
+    const int iconRadius = iconPx * 14 / 56;   // 9
+    const int svgSize    = std::max(1, iconPx - 12); // 24, with 6px inset
 
-    // macOS-style centered translucent icon dock (no labels, like the real
-    // Dock). The dock is wrapped in a full-width HBox with
-    // child_align="hcenter,vcenter": that reliably centers the auto-width
-    // frosted bar on the screen.
+    // macOS-style translucent icon dock (no labels), centered across the
+    // bottom of the screen.
     ui::HBox* pDockRow = new ui::HBox(this);
-    // Exactly the bar's height, and the margin is then the whole gap between
-    // the dock and the bottom of the screen: centring the bar in a taller row
-    // left slack above and below it, which is the space the dock was asked to
-    // sit lower into.
+    // Keep the existing six-pixel inset from the bottom edge.
     pDockRow->SetAttribute("height", Num(barHeight));
+    pDockRow->SetAttribute("width", "stretch");
     pDockRow->SetAttribute("child_align", "hcenter,vcenter");
-    pDockRow->SetAttribute("margin", "0,0,0,10");
+    pDockRow->SetAttribute("margin", "0,0,0,6");
     pRoot->AddItem(pDockRow);
 
     ui::HBox* pDock = new ui::HBox(this);
+    m_pDockBar = pDock;
     pDock->SetAttribute("height", Num(barHeight));
     pDock->SetAttribute("width", "auto");
     pDock->SetAttribute("padding", "6,6,6,6");
     pDock->SetAttribute("child_align", "hcenter,vcenter");
-    pDock->SetBkColor(g_pal.dockBg);
-    pDock->SetBorderColor(g_pal.dockBorder);
-    pDock->SetAttribute("border_size", "1");
+    // The compositor supplies the translucent glass plate behind this client
+    // surface so its alpha stays clear over every wallpaper/application.
+    pDock->SetBkColor(g_pal.transparent);
+    pDock->SetBkColor2(g_pal.transparent);
+    pDock->SetBorderColor(g_pal.transparent);
+    pDock->SetAttribute("border_size", "0");
     SetRadius(pDock, barRadius, false);
     pDockRow->AddItem(pDock);
-
-    // Room under each tile for the running-app dot. The lane is reserved
-    // whether or not anything is running, so tiles never shift as apps start
-    // and stop -- the dot only changes colour.
-    const int dotLaneH = std::max(5, iconPx / 8);
-    const int dotSize  = std::max(3, iconPx / 14);
 
     // A hairline between dock sections. macOS shows two of them -- one
     // between the everyday apps and the rest, one before the minimized
@@ -1962,6 +2065,7 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
     };
 
     m_dockDots.clear();
+    m_dockDotAnchors.clear();
     int lastGroup = -1;
     const int kDockCount = static_cast<int>(sizeof(kDockApps) / sizeof(kDockApps[0]));
     for (int i = 0; i < kDockCount; ++i) {
@@ -2031,24 +2135,25 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
 
         ui::VBox* pItem = new ui::VBox(this);
         pItem->SetAttribute("width", Num(iconPx));
-        pItem->SetAttribute("height", Num(iconPx + dotLaneH));
+        pItem->SetAttribute("height", Num(iconPx));
         pItem->SetAttribute("margin", MarginH(iconGap));
 
         pItem->AddItem(pIcon);
+        pDock->AddItem(pItem);
 
+        // The indicator sits in the Dock's white lower inset, centered below
+        // the tile rather than painted over the colored icon background.
         ui::Control* pDot = new ui::Control(this);
+        pDot->SetFloat(true);
+        pDot->SetKeepFloatPos(true);
         pDot->SetAttribute("width", Num(dotSize));
         pDot->SetAttribute("height", Num(dotSize));
-        pDot->SetAttribute("halign", "center");
-        pDot->SetAttribute("margin",
-            ui::StringUtil::Printf("0,%d,0,0", std::max(1, dotLaneH - dotSize - 2)));
         pDot->SetBkColor(g_pal.transparent);
         pDot->SetMouseEnabled(false);
         SetRadius(pDot, dotSize / 2, false);
-        pItem->AddItem(pDot);
+        pDock->AddItem(pDot);
         m_dockDots.push_back(pDot);
-
-        pDock->AddItem(pItem);
+        m_dockDotAnchors.push_back(pIcon);
     }
 
     // Programs running without a launcher of their own -- the Wi-Fi window and
@@ -2101,9 +2206,7 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
                 // Same channel the shelf uses to restore a minimized window:
                 // the title is the only thing the compositor listens to, and
                 // its one id-addressed command raises and focuses.
-                SetText(ui::StringUtil::Printf(
-                    "PolluxOS Desktop (restore:%lu)", id));
-                m_titleMarkerPending = true;
+                RequestRestoreWindow(id);
                 return true;
             });
             const std::string title = info.title.empty() ? info.exe : info.title;
@@ -2113,27 +2216,26 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
                 return true;
             });
 
-            // Same wrapper as the pinned tiles, dot lane included, so the two
-            // kinds of tile sit at the same height; the dot is lit, since a
-            // tile that exists at all means the program is running.
+            // Same-size wrapper as the pinned tiles; the running dot overlays
+            // the lower edge so all tiles fit between the 6px bar insets.
             ui::VBox* pItem = new ui::VBox(this);
             pItem->SetAttribute("width", Num(iconPx));
-            pItem->SetAttribute("height", Num(iconPx + dotLaneH));
+            pItem->SetAttribute("height", Num(iconPx));
             pItem->SetAttribute("margin", MarginH(iconGap));
             pItem->AddItem(pIcon);
+            pDock->AddItem(pItem);
 
             ui::Control* pDot = new ui::Control(this);
+            pDot->SetFloat(true);
+            pDot->SetKeepFloatPos(true);
             pDot->SetAttribute("width", Num(dotSize));
             pDot->SetAttribute("height", Num(dotSize));
-            pDot->SetAttribute("halign", "center");
-            pDot->SetAttribute("margin",
-                ui::StringUtil::Printf("0,%d,0,0", std::max(1, dotLaneH - dotSize - 2)));
             pDot->SetBkColor(g_pal.dockDot);
             pDot->SetMouseEnabled(false);
             SetRadius(pDot, dotSize / 2, false);
-            pItem->AddItem(pDot);
-
-            pDock->AddItem(pItem);
+            pDock->AddItem(pDot);
+            m_dockDots.push_back(pDot);
+            m_dockDotAnchors.push_back(pIcon);
         }
     }
 
@@ -2150,7 +2252,7 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
     // width paints but can never be clicked. So the shelf is part of what a
     // rebuild produces rather than something patched afterwards.
     // Thumbnail-shaped, as the Dock's minimized windows are.
-    const int chipH = iconPx + 4;
+    const int chipH = iconPx;
     const int chipW = chipH * 8 / 5;
     m_minimizedSlots.clear();
     m_minimizedIds.clear();
@@ -2162,7 +2264,7 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
         ui::Button* pChip = new ui::Button(this);
         pChip->SetAttribute("width", Num(chipW));
         pChip->SetAttribute("height", Num(chipH));
-        pChip->SetAttribute("margin", MarginH(iconGap / 2));
+        pChip->SetAttribute("margin", MarginH(iconGap));
         // The dock centres a child by its own valign, not by the bar's
         // child_align (that one only covers the horizontal axis in HLayout).
         // Without this the chip sits against the top edge of the dock.
@@ -2202,9 +2304,7 @@ void PolluxOSForm::BuildDock(ui::VBox* pRoot)
                 // compositor; see the restore handling there. The marker is
                 // cleared on the next tick so the two title changes cannot
                 // coalesce into one commit.
-                SetText(ui::StringUtil::Printf(
-                    "PolluxOS Desktop (restore:%lu)", m_minimizedIds[index]));
-                m_titleMarkerPending = true;
+                RequestRestoreWindow(m_minimizedIds[index]);
             }
             return true;
         });
@@ -2244,16 +2344,20 @@ void PolluxOSForm::UpdateClock()
 {
     // Runs before the clock-label guard below so the dock keeps tracking
     // running apps even if no clock label was ever built.
-    PollWindowState();
+    if (!m_menuOverlay) {
+        PollWindowState();
+    }
 
     if (m_titleMarkerPending) {
         // A tick after the request, so the compositor is certain to have seen
         // it as its own title change.
         m_titleMarkerPending = false;
-        SetText("PolluxOS Desktop");
+        SetCompositorMenuOpen(false);
     }
 
-    GrabPendingThumbnail();
+    if (!m_dockOverlay && !m_menuOverlay) {
+        GrabPendingThumbnail();
+    }
 
     PollSettings();
 
@@ -2261,6 +2365,8 @@ void PolluxOSForm::UpdateClock()
         m_uiDirty = false;
         RebuildUi();
     }
+
+    UpdateDockHitArea();
 
     if (m_pClockLabel == nullptr && m_pDesktopClockLabel == nullptr &&
         m_pDesktopDateLabel == nullptr) {

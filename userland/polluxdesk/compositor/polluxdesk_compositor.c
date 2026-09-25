@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <getopt.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -14,6 +15,9 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <fontconfig/fontconfig.h>
+#include <ft2build.h>
+#include FT_FREETYPE_H
 #include <libdrm/drm_fourcc.h>
 #include <libinput.h>
 #include <wayland-server-core.h>
@@ -46,12 +50,34 @@
 
 /* For brevity's sake, struct members are annotated where they are used. */
 #define POLLUXDESK_TITLEBAR_HEIGHT 28
+#define POLLUXDESK_TITLE_TEXT_HEIGHT 13
+#define POLLUXDESK_TITLE_TEXT_SIDE_PADDING 18
+#define POLLUXDESK_TITLE_TEXT_LEFT_RESERVED 82
 #define POLLUXDESK_BUTTON_SIZE 16
 #define POLLUXDESK_WINDOW_RADIUS 14     /* rounded window corner radius */
 #define POLLUXDESK_BACKGROUND_STRIPES 128
 #define POLLUXDESK_SHADOW_BLUR 32
 #define POLLUXDESK_SHADOW_MAX_ALPHA 96   /* 96/255 at the window edge */
+#define POLLUXDESK_SHADOW_INACTIVE_ALPHA 42
 #define POLLUXDESK_SHADOW_CORNER 14      /* rounded shadow corners */
+#define POLLUXDESK_DOCK_WORKAREA_HEIGHT 100
+#define POLLUXDESK_MAXIMIZE_DOCK_GAP 2
+#define POLLUXDESK_SHELL_BAR_HIT_HEIGHT 40
+#define POLLUXDESK_MENU_BAR_HEIGHT 30
+#define POLLUXDESK_FULLSCREEN_REVEAL_HEIGHT 4
+#define POLLUXDESK_FULLSCREEN_HIDE_HEIGHT 64
+#define POLLUXDESK_MAXIMIZE_PREVIEW_BORDER 2
+#define POLLUXDESK_MAXIMIZE_PREVIEW_SHADOW 4
+#define POLLUXDESK_DRAG_SLOW_SPEED 900.0
+#define POLLUXDESK_MAXIMIZED_DRAG_RESTORE_THRESHOLD 4.0
+#define POLLUXDESK_DRAG_BREAKAWAY_MM 10.0
+#define POLLUXDESK_DRAG_BREAKAWAY_FALLBACK_PX 38.0
+#define POLLUXDESK_EDGE_TOKEN_SCREEN_LEFT UINT64_C(1)
+#define POLLUXDESK_EDGE_TOKEN_SCREEN_RIGHT UINT64_C(2)
+#define POLLUXDESK_EDGE_TOKEN_SCREEN_TOP UINT64_C(3)
+#define POLLUXDESK_EDGE_TOKEN_MENU_BAR UINT64_C(4)
+#define POLLUXDESK_EDGE_TOKEN_DOCK UINT64_C(5)
+#define POLLUXDESK_EDGE_TOKEN_SCREEN_BOTTOM UINT64_C(6)
 /* Edge/corner drag hotspot, measured either side of the window edge. The
  * band reaches only a few pixels into the window: whatever a client draws
  * flush against its own edge -- a scrollbar above all -- lives there, and a
@@ -73,6 +99,9 @@ struct polluxdesk_server {
 	struct wlr_allocator *allocator;
 	struct wlr_scene *scene;
 	struct wlr_scene_output_layout *scene_layout;
+	struct wlr_scene_buffer *maximize_preview;
+	int maximize_preview_width;
+	int maximize_preview_height;
 
 	struct wlr_xdg_shell *xdg_shell;
 	struct wlr_xdg_decoration_manager_v1 *xdg_decoration_manager;
@@ -108,6 +137,15 @@ struct polluxdesk_server {
 	enum polluxdesk_cursor_mode cursor_mode;
 	struct polluxdesk_toplevel *grabbed_toplevel;
 	double grab_x, grab_y;
+	double drag_last_x, drag_last_y;
+	struct timespec drag_last_time;
+	double drag_pending_x, drag_pending_y;
+	uint64_t drag_pending_token_x, drag_pending_token_y;
+	uint64_t drag_released_token_x, drag_released_token_y;
+	int drag_released_sign_x, drag_released_sign_y;
+	bool maximize_preview_active;
+	bool maximize_restore_pending;
+	double maximize_restore_start_x, maximize_restore_start_y;
 	struct wlr_box grab_geobox;
 	uint32_t resize_edges;
 
@@ -119,6 +157,7 @@ struct polluxdesk_server {
 	 * window list from one left behind by an exited compositor. */
 	unsigned int state_generation;
 	bool cursor_warped;
+	bool fullscreen_chrome_visible;
 	/* True while the pointer is wearing one of the compositor's own resize
 	 * cursors. Moving off a border does not change pointer focus when it stays
 	 * over the same surface, and focus is the only other place the cursor is
@@ -143,7 +182,7 @@ struct polluxdesk_output {
 enum polluxdesk_titlebar_button {
 	POLLUXDESK_BUTTON_CLOSE,
 	POLLUXDESK_BUTTON_MINIMIZE,
-	POLLUXDESK_BUTTON_MAXIMIZE,
+	POLLUXDESK_BUTTON_FULLSCREEN,
 };
 
 /* A one-shot, malloc-backed ARGB8888 wlr_buffer used for the soft window
@@ -160,26 +199,50 @@ struct polluxdesk_toplevel {
 	struct wlr_xdg_toplevel *xdg_toplevel;
 	struct wlr_scene_tree *scene_tree;
 	struct wlr_scene_tree *content_tree;
+	struct wlr_scene_rect *content_background;
 	struct wlr_scene_rect *titlebar;
+	struct wlr_scene_buffer *dock_glass;
+	int dock_glass_width;
+	int dock_glass_height;
+	int dock_glass_radius;
+	struct wlr_scene_buffer *title_text;
 	struct wlr_scene_buffer *titlebar_buttons[3];
 	struct wlr_scene_buffer *corners[4];   /* rounded-corner wallpaper masks */
 	int corner_abs_y;                      /* gradient key of the corner masks */
+	int corner_shadow_alpha;
 	struct wlr_scene_buffer *shadow;
 	int shadow_width;
 	int shadow_height;
+	int shadow_alpha;
+	char *title_text_value;
+	int title_text_width;
+	int title_text_height;
+	int title_text_max_width;
+	bool title_text_active;
+	bool title_text_valid;
 	bool is_desktop;
+	bool is_dock;
+	struct wlr_box dock_hit_box;
+	int dock_hit_radius;
+	bool dock_hit_box_valid;
+	bool is_menu_bar;
 	bool is_borderless;
 	bool is_overlay;
 	bool overlay_positioned;
 	bool client_side_decorated;
 	bool alpha_debugged;
 	bool minimized;
+	bool activated;
 	/* Set between a minimize and the shell reporting that it has grabbed
 	 * the window's pixels; the window stays on screen for that long. */
 	bool pending_thumb;
 	struct timespec thumb_since;
 	struct wlr_xdg_toplevel_decoration_v1 *decoration;
 	bool maximized;
+	bool restore_geometry_pending;
+	bool fullscreen;
+	bool fullscreen_restore_maximized;
+	struct wlr_box fullscreen_restore_geo;
 	bool menu_open;      /* desktop shell dropdown is visible */
 	struct wlr_box restore_geo;
 	struct wl_listener map;
@@ -262,6 +325,203 @@ static const struct wlr_buffer_impl shadow_buffer_impl = {
 	.end_data_ptr_access = shadow_buffer_end_data_ptr_access,
 };
 
+static FT_Library g_title_font_library;
+static bool g_title_font_library_ready;
+
+static uint32_t utf8_next_codepoint(const unsigned char **cursor) {
+	const unsigned char *p = *cursor;
+	if (*p < 0x80) {
+		*cursor = p + 1;
+		return *p;
+	}
+	if ((*p & 0xE0) == 0xC0 && (p[1] & 0xC0) == 0x80) {
+		*cursor = p + 2;
+		return ((uint32_t)(p[0] & 0x1F) << 6) | (uint32_t)(p[1] & 0x3F);
+	}
+	if ((*p & 0xF0) == 0xE0 && (p[1] & 0xC0) == 0x80 &&
+			(p[2] & 0xC0) == 0x80) {
+		*cursor = p + 3;
+		return ((uint32_t)(p[0] & 0x0F) << 12) |
+			((uint32_t)(p[1] & 0x3F) << 6) | (uint32_t)(p[2] & 0x3F);
+	}
+	if ((*p & 0xF8) == 0xF0 && (p[1] & 0xC0) == 0x80 &&
+			(p[2] & 0xC0) == 0x80 && (p[3] & 0xC0) == 0x80) {
+		*cursor = p + 4;
+		return ((uint32_t)(p[0] & 0x07) << 18) |
+			((uint32_t)(p[1] & 0x3F) << 12) |
+			((uint32_t)(p[2] & 0x3F) << 6) | (uint32_t)(p[3] & 0x3F);
+	}
+	*cursor = p + 1;
+	return 0xFFFD;
+}
+
+static struct wlr_buffer *title_text_buffer_create(const char *text,
+		bool active, int max_width) {
+	if (text == NULL || text[0] == '\0' || max_width <= 0 ||
+			!FcInit() || (!g_title_font_library_ready &&
+			FT_Init_FreeType(&g_title_font_library) != 0)) {
+		return NULL;
+	}
+	g_title_font_library_ready = true;
+
+	size_t text_bytes = strlen(text);
+	uint32_t *codepoints = calloc(text_bytes + 1, sizeof(*codepoints));
+	if (codepoints == NULL) {
+		return NULL;
+	}
+	FcCharSet *charset = FcCharSetCreate();
+	if (charset == NULL) {
+		free(codepoints);
+		return NULL;
+	}
+	size_t count = 0;
+	const unsigned char *cursor = (const unsigned char *)text;
+	while (*cursor != '\0' && count < text_bytes) {
+		uint32_t cp = utf8_next_codepoint(&cursor);
+		codepoints[count++] = cp;
+		FcCharSetAddChar(charset, (FcChar32)cp);
+	}
+
+	FcPattern *pattern = FcPatternCreate();
+	if (pattern == NULL) {
+		FcCharSetDestroy(charset);
+		free(codepoints);
+		return NULL;
+	}
+	FcPatternAddString(pattern, FC_FAMILY, (const FcChar8 *)"sans-serif");
+	FcPatternAddCharSet(pattern, FC_CHARSET, charset);
+	FcConfigSubstitute(NULL, pattern, FcMatchPattern);
+	FcDefaultSubstitute(pattern);
+	FcResult result;
+	FcPattern *match = FcFontMatch(NULL, pattern, &result);
+	FcPatternDestroy(pattern);
+	FcCharSetDestroy(charset);
+	if (match == NULL) {
+		free(codepoints);
+		return NULL;
+	}
+	FcChar8 *font_path = NULL;
+	if (FcPatternGetString(match, FC_FILE, 0, &font_path) != FcResultMatch) {
+		FcPatternDestroy(match);
+		free(codepoints);
+		return NULL;
+	}
+	FT_Face face;
+	FT_Error error = FT_New_Face(g_title_font_library,
+		(const char *)font_path, 0, &face);
+	FcPatternDestroy(match);
+	if (error != 0 || FT_Set_Pixel_Sizes(face, 0, POLLUXDESK_TITLE_TEXT_HEIGHT) != 0) {
+		if (error == 0) {
+			FT_Done_Face(face);
+		}
+		free(codepoints);
+		return NULL;
+	}
+
+	FT_UInt previous = 0;
+	FT_Pos advance = 0;
+	for (size_t i = 0; i < count; ++i) {
+		FT_UInt glyph = FT_Get_Char_Index(face, codepoints[i]);
+		if (glyph == 0 || FT_Load_Glyph(face, glyph, FT_LOAD_DEFAULT) != 0) {
+			previous = 0;
+			continue;
+		}
+		if (previous != 0 && FT_HAS_KERNING(face)) {
+			FT_Vector kerning;
+			if (FT_Get_Kerning(face, previous, glyph, FT_KERNING_DEFAULT,
+					&kerning) == 0) {
+				advance += kerning.x;
+			}
+		}
+		advance += face->glyph->advance.x;
+		previous = glyph;
+	}
+	int text_width = (int)((advance + 63) >> 6);
+	if (text_width > max_width) {
+		text_width = max_width;
+	}
+	if (text_width < 1) {
+		FT_Done_Face(face);
+		free(codepoints);
+		return NULL;
+	}
+	const int text_height = 18;
+	struct polluxdesk_shadow_buffer *buffer = calloc(1, sizeof(*buffer));
+	if (buffer == NULL) {
+		FT_Done_Face(face);
+		free(codepoints);
+		return NULL;
+	}
+	buffer->pixels = calloc((size_t)text_width * text_height,
+		sizeof(*buffer->pixels));
+	if (buffer->pixels == NULL) {
+		free(buffer);
+		FT_Done_Face(face);
+		free(codepoints);
+		return NULL;
+	}
+
+	const uint8_t red = active ? 43 : 126;
+	const uint8_t green = active ? 47 : 131;
+	const uint8_t blue = active ? 54 : 141;
+	const int baseline = (int)(face->size->metrics.ascender >> 6);
+	FT_Pos pen_x = 0;
+	previous = 0;
+	for (size_t i = 0; i < count; ++i) {
+		FT_UInt glyph = FT_Get_Char_Index(face, codepoints[i]);
+		if (glyph == 0 || FT_Load_Glyph(face, glyph,
+				FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL) != 0) {
+			previous = 0;
+			continue;
+		}
+		if (previous != 0 && FT_HAS_KERNING(face)) {
+			FT_Vector kerning;
+			if (FT_Get_Kerning(face, previous, glyph, FT_KERNING_DEFAULT,
+					&kerning) == 0) {
+				pen_x += kerning.x;
+			}
+		}
+		FT_GlyphSlot slot = face->glyph;
+		int glyph_x = (int)(pen_x >> 6) + slot->bitmap_left;
+		int glyph_y = baseline - slot->bitmap_top;
+		for (unsigned int y = 0; y < slot->bitmap.rows; ++y) {
+			int pixel_y = glyph_y + (int)y;
+			if (pixel_y < 0 || pixel_y >= text_height) {
+				continue;
+			}
+			const unsigned char *row = slot->bitmap.buffer +
+				(size_t)y * (size_t)abs(slot->bitmap.pitch);
+			for (unsigned int x = 0; x < slot->bitmap.width; ++x) {
+				int pixel_x = glyph_x + (int)x;
+				if (pixel_x < 0 || pixel_x >= text_width) {
+					continue;
+				}
+				uint8_t coverage = 0;
+				if (slot->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY) {
+					coverage = row[x];
+				} else if (slot->bitmap.pixel_mode == FT_PIXEL_MODE_MONO) {
+					coverage = (row[x >> 3] & (0x80 >> (x & 7))) ? 255 : 0;
+				}
+				if (coverage == 0) {
+					continue;
+				}
+				uint8_t r = (uint8_t)((uint16_t)red * coverage / 255);
+				uint8_t g = (uint8_t)((uint16_t)green * coverage / 255);
+				uint8_t b = (uint8_t)((uint16_t)blue * coverage / 255);
+				buffer->pixels[pixel_y * text_width + pixel_x] =
+					(uint32_t)coverage << 24 | (uint32_t)r << 16 |
+					(uint32_t)g << 8 | b;
+			}
+		}
+		pen_x += slot->advance.x;
+		previous = glyph;
+	}
+	FT_Done_Face(face);
+	free(codepoints);
+	wlr_buffer_init(&buffer->base, &shadow_buffer_impl, text_width, text_height);
+	return &buffer->base;
+}
+
 /* Signed distance to the rounded-rectangle window outline. Negative inside,
  * positive outside. */
 static float rounded_rect_distance(float x, float y,
@@ -278,7 +538,8 @@ static float rounded_rect_distance(float x, float y,
 /* Soft, compositor-owned macOS shadow. The pixels form a transparent center
  * and a quadratic alpha falloff around the outline; there are no nested
  * rectangles, so no black banding at the shadow edge. */
-static struct wlr_buffer *shadow_buffer_create(int width, int height) {
+static struct wlr_buffer *shadow_buffer_create(int width, int height,
+		int max_alpha) {
 	const int blur = POLLUXDESK_SHADOW_BLUR;
 	const int corner = POLLUXDESK_SHADOW_CORNER;
 	const int bw = width + blur * 2;
@@ -301,7 +562,7 @@ static struct wlr_buffer *shadow_buffer_create(int width, int height) {
 	const float cy = (float)blur + (float)height * 0.5f;
 	const float half_w = (float)width * 0.5f;
 	const float half_h = (float)height * 0.5f;
-	const float max_alpha = (float)POLLUXDESK_SHADOW_MAX_ALPHA;
+	const float shadow_alpha = (float)max_alpha;
 
 	for (int y = 0; y < bh; ++y) {
 		for (int x = 0; x < bw; ++x) {
@@ -311,7 +572,7 @@ static struct wlr_buffer *shadow_buffer_create(int width, int height) {
 			if (d > 0.0f && d < (float)blur) {
 				float t = d / (float)blur;
 				float falloff = (1.0f - t) * (1.0f - t);
-				a = (uint8_t)(max_alpha * falloff + 0.5f);
+				a = (uint8_t)(shadow_alpha * falloff + 0.5f);
 			}
 			/* Premultiplied black: ARGB = 0xAARRGGBB with A in the top
 			 * byte. Keeping the center fully transparent lets the client
@@ -490,7 +751,8 @@ static struct wlr_buffer *resize_cursor_buffer_create(int direction) {
  * corner: 0=TL, 1=TR, 2=BL, 3=BR. abs_y is the absolute output Y of the
  * corner patch (the wallpaper is a vertical gradient). */
 static struct wlr_buffer *corner_mask_buffer_create(
-		struct polluxdesk_server *server, int radius, int corner, int abs_y) {
+		struct polluxdesk_server *server, int radius, int corner, int abs_y,
+		int shadow_alpha) {
 	struct polluxdesk_shadow_buffer *buf = calloc(1, sizeof(*buf));
 	if (buf == NULL) {
 		return NULL;
@@ -503,10 +765,10 @@ static struct wlr_buffer *corner_mask_buffer_create(
 	/* Quarter-circle center in texture-local coordinates. */
 	float cx = (corner == 0 || corner == 2) ? (float)radius : 0.0f;
 	float cy = (corner == 0 || corner == 1) ? (float)radius : 0.0f;
-	uint32_t bg = background_color_at(server, abs_y + radius / 2);
 	const float blur = (float)POLLUXDESK_SHADOW_BLUR;
-	const float max_shadow_a = (float)POLLUXDESK_SHADOW_MAX_ALPHA / 255.0f;
+	const float max_shadow_a = (float)shadow_alpha / 255.0f;
 	for (int y = 0; y < radius; ++y) {
+		uint32_t bg = background_color_at(server, abs_y + y);
 		for (int x = 0; x < radius; ++x) {
 			float dx = (float)x + 0.5f - cx;
 			float dy = (float)y + 0.5f - cy;
@@ -574,9 +836,210 @@ static void server_get_output_box(struct polluxdesk_server *server, struct wlr_b
 	}
 }
 
+static void server_get_workarea_box(struct polluxdesk_server *server,
+		struct wlr_box *box) {
+	server_get_output_box(server, box);
+	int output_bottom = box->y + box->height;
+	box->y += POLLUXDESK_MENU_BAR_HEIGHT;
+	int workarea_bottom = output_bottom - POLLUXDESK_DOCK_WORKAREA_HEIGHT;
+	struct polluxdesk_toplevel *dock;
+	wl_list_for_each(dock, &server->toplevels, link) {
+		if (dock->is_dock && dock->dock_hit_box_valid) {
+			workarea_bottom = dock->dock_hit_box.y -
+				POLLUXDESK_MAXIMIZE_DOCK_GAP;
+			break;
+		}
+	}
+	box->height = workarea_bottom - box->y;
+	if (box->height < 1) {
+		box->height = 1;
+	}
+}
+
+static struct wlr_buffer *maximize_preview_buffer_create(int width, int height) {
+	struct polluxdesk_shadow_buffer *preview = calloc(1, sizeof(*preview));
+	if (preview == NULL) {
+		return NULL;
+	}
+	preview->pixels = calloc((size_t)width * height, sizeof(*preview->pixels));
+	if (preview->pixels == NULL) {
+		free(preview);
+		return NULL;
+	}
+
+	const float cx = (float)width * 0.5f;
+	const float cy = (float)height * 0.5f;
+	const float half_w = (float)width * 0.5f;
+	const float half_h = (float)height * 0.5f;
+	const float radius = (float)POLLUXDESK_WINDOW_RADIUS;
+	const float edge = (float)POLLUXDESK_MAXIMIZE_PREVIEW_BORDER;
+	const float inner_shadow = (float)POLLUXDESK_MAXIMIZE_PREVIEW_SHADOW;
+	const float outline_rgba[4] = { 0.94f, 0.96f, 1.0f, 0.56f };
+	for (int y = 0; y < height; ++y) {
+		for (int x = 0; x < width; ++x) {
+			float d = rounded_rect_distance((float)x + 0.5f, (float)y + 0.5f,
+				cx, cy, half_w, half_h, radius);
+			uint8_t alpha = 0;
+			uint8_t red = 0, green = 0, blue = 0;
+			if (d <= 0.0f && d >= -edge) {
+				alpha = (uint8_t)(outline_rgba[3] * 255.0f + 0.5f);
+				red = (uint8_t)(outline_rgba[0] * outline_rgba[3] * 255.0f + 0.5f);
+				green = (uint8_t)(outline_rgba[1] * outline_rgba[3] * 255.0f + 0.5f);
+				blue = (uint8_t)(outline_rgba[2] * outline_rgba[3] * 255.0f + 0.5f);
+			} else if (d < -edge && d >= -(edge + inner_shadow)) {
+				float fade = 1.0f - (-d - edge) / inner_shadow;
+				alpha = (uint8_t)(14.0f * fade + 0.5f);
+			}
+			preview->pixels[(size_t)y * width + x] = (uint32_t)alpha << 24 |
+				(uint32_t)red << 16 | (uint32_t)green << 8 | blue;
+		}
+	}
+	wlr_buffer_init(&preview->base, &shadow_buffer_impl, width, height);
+	return &preview->base;
+}
+
+/* A translucent blue-gray, round-cornered glass plate behind the Dock icons.
+ * The client reports the fitted bar bounds; keeping this as a compositor
+ * buffer preserves the wallpaper instead of letting the fullscreen client
+ * surface turn the bar into a flat white panel. */
+static struct wlr_buffer *dock_glass_buffer_create(int width, int height,
+		int radius) {
+	struct polluxdesk_shadow_buffer *glass = calloc(1, sizeof(*glass));
+	if (glass == NULL) {
+		return NULL;
+	}
+	glass->pixels = calloc((size_t)width * height, sizeof(*glass->pixels));
+	if (glass->pixels == NULL) {
+		free(glass);
+		return NULL;
+	}
+	if (radius < 1) { radius = 1; }
+	if (radius > width / 2) { radius = width / 2; }
+	if (radius > height / 2) { radius = height / 2; }
+
+	const float cx = (float)width * 0.5f;
+	const float cy = (float)height * 0.5f;
+	const float half_w = (float)width * 0.5f;
+	const float half_h = (float)height * 0.5f;
+	const float top[4] = { 0.78f, 0.90f, 1.00f, 0.62f };
+	const float bottom[4] = { 0.48f, 0.72f, 0.96f, 0.48f };
+	for (int y = 0; y < height; ++y) {
+		float t = height > 1 ? (float)y / (float)(height - 1) : 0.0f;
+		for (int x = 0; x < width; ++x) {
+			float d = rounded_rect_distance((float)x + 0.5f, (float)y + 0.5f,
+				cx, cy, half_w, half_h, (float)radius);
+			float coverage = fminf(fmaxf(0.5f - d, 0.0f), 1.0f);
+			if (coverage <= 0.0f) {
+				continue;
+			}
+			float alpha = (top[3] + (bottom[3] - top[3]) * t) * coverage;
+			uint8_t a = (uint8_t)(alpha * 255.0f + 0.5f);
+			uint8_t r = (uint8_t)((top[0] + (bottom[0] - top[0]) * t) *
+				alpha * 255.0f + 0.5f);
+			uint8_t g = (uint8_t)((top[1] + (bottom[1] - top[1]) * t) *
+				alpha * 255.0f + 0.5f);
+			uint8_t b = (uint8_t)((top[2] + (bottom[2] - top[2]) * t) *
+				alpha * 255.0f + 0.5f);
+			glass->pixels[(size_t)y * width + x] = (uint32_t)a << 24 |
+				(uint32_t)r << 16 | (uint32_t)g << 8 | b;
+		}
+	}
+	wlr_buffer_init(&glass->base, &shadow_buffer_impl, width, height);
+	return &glass->base;
+}
+
+static void toplevel_update_dock_glass(struct polluxdesk_toplevel *dock) {
+	if (!dock->is_dock || !dock->dock_hit_box_valid) {
+		if (dock->dock_glass != NULL) {
+			wlr_scene_node_set_enabled(&dock->dock_glass->node, false);
+		}
+		return;
+	}
+	if (dock->dock_glass == NULL) {
+		dock->dock_glass = wlr_scene_buffer_create(
+			dock->scene_tree, NULL);
+		if (dock->dock_glass == NULL) {
+			return;
+		}
+		dock->dock_glass->node.data = dock;
+	}
+	if (dock->dock_glass_width != dock->dock_hit_box.width ||
+			dock->dock_glass_height != dock->dock_hit_box.height ||
+			dock->dock_glass_radius != dock->dock_hit_radius) {
+		struct wlr_buffer *buffer = dock_glass_buffer_create(
+			dock->dock_hit_box.width, dock->dock_hit_box.height,
+			dock->dock_hit_radius);
+		if (buffer == NULL) {
+			return;
+		}
+		wlr_scene_buffer_set_buffer(dock->dock_glass, buffer);
+		wlr_buffer_drop(buffer);
+		dock->dock_glass_width = dock->dock_hit_box.width;
+		dock->dock_glass_height = dock->dock_hit_box.height;
+		dock->dock_glass_radius = dock->dock_hit_radius;
+	}
+	wlr_scene_node_set_position(&dock->dock_glass->node,
+		dock->dock_hit_box.x - (int)dock->scene_tree->node.x,
+		dock->dock_hit_box.y - (int)dock->scene_tree->node.y);
+	wlr_scene_node_set_enabled(&dock->dock_glass->node, true);
+	/* The glass sits below client-drawn icons and dividers. */
+	wlr_scene_node_lower_to_bottom(&dock->dock_glass->node);
+}
+
+static void server_set_maximize_preview(struct polluxdesk_server *server,
+		bool visible) {
+	if (!visible) {
+		if (server->maximize_preview != NULL) {
+			wlr_scene_node_set_enabled(&server->maximize_preview->node, false);
+		}
+		server->maximize_preview_active = false;
+		return;
+	}
+	struct wlr_box workarea;
+	server_get_workarea_box(server, &workarea);
+	if (workarea.width <= POLLUXDESK_WINDOW_RADIUS * 2 ||
+			workarea.height <= POLLUXDESK_WINDOW_RADIUS * 2) {
+		return;
+	}
+	if (server->maximize_preview == NULL) {
+		server->maximize_preview = wlr_scene_buffer_create(
+			&server->scene->tree, NULL);
+	}
+	if (server->maximize_preview == NULL) {
+		return;
+	}
+	if (server->maximize_preview_width != workarea.width ||
+			server->maximize_preview_height != workarea.height) {
+		struct wlr_buffer *buffer = maximize_preview_buffer_create(
+			workarea.width, workarea.height);
+		if (buffer == NULL) {
+			return;
+		}
+		wlr_scene_buffer_set_buffer(server->maximize_preview, buffer);
+		wlr_buffer_drop(buffer);
+		server->maximize_preview_width = workarea.width;
+		server->maximize_preview_height = workarea.height;
+	}
+	wlr_scene_node_set_position(&server->maximize_preview->node,
+		workarea.x, workarea.y);
+	wlr_scene_node_set_enabled(&server->maximize_preview->node, true);
+	wlr_scene_node_raise_to_top(&server->maximize_preview->node);
+	server->maximize_preview_active = true;
+}
+
 static bool toplevel_is_desktop_shell(struct polluxdesk_toplevel *toplevel) {
 	const char *title = toplevel->xdg_toplevel->title;
 	return title != NULL && strncmp(title, "PolluxOS Desktop", 16) == 0;
+}
+
+static bool toplevel_is_dock_shell(struct polluxdesk_toplevel *toplevel) {
+	const char *title = toplevel->xdg_toplevel->title;
+	return title != NULL && strncmp(title, "PolluxOS Dock", 13) == 0;
+}
+
+static bool toplevel_is_menu_bar(struct polluxdesk_toplevel *toplevel) {
+	const char *title = toplevel->xdg_toplevel->title;
+	return title != NULL && strncmp(title, "PolluxOS MenuBar", 16) == 0;
 }
 
 static bool toplevel_is_login_shell(struct polluxdesk_toplevel *toplevel) {
@@ -603,6 +1066,52 @@ static struct polluxdesk_toplevel *server_get_overlay(
 	return NULL;
 }
 
+static struct polluxdesk_toplevel *server_get_dock(
+		struct polluxdesk_server *server) {
+	struct polluxdesk_toplevel *toplevel;
+	wl_list_for_each(toplevel, &server->toplevels, link) {
+		if (toplevel->is_dock && !toplevel->minimized) {
+			return toplevel;
+		}
+	}
+	return NULL;
+}
+
+static struct polluxdesk_toplevel *server_get_desktop(
+		struct polluxdesk_server *server) {
+	struct polluxdesk_toplevel *toplevel;
+	wl_list_for_each(toplevel, &server->toplevels, link) {
+		if (toplevel->is_desktop && !toplevel->minimized) {
+			return toplevel;
+		}
+	}
+	return NULL;
+}
+
+static struct polluxdesk_toplevel *server_get_menu_bar(
+		struct polluxdesk_server *server) {
+	struct polluxdesk_toplevel *toplevel;
+	wl_list_for_each(toplevel, &server->toplevels, link) {
+		if (toplevel->is_menu_bar && !toplevel->minimized) {
+			return toplevel;
+		}
+	}
+	return NULL;
+}
+
+static struct polluxdesk_toplevel *server_get_fullscreen(
+		struct polluxdesk_server *server) {
+	struct polluxdesk_toplevel *toplevel;
+	wl_list_for_each(toplevel, &server->toplevels, link) {
+		if (toplevel->fullscreen && !toplevel->minimized) {
+			return toplevel;
+		}
+	}
+	return NULL;
+}
+
+static void server_raise_shell_layers(struct polluxdesk_server *server);
+
 /* Temporary client-side decoration hook: the dui client does not speak the
  * xdg-decoration protocol yet, so use the example window title to identify
  * windows that draw their own title bar. The compositor still provides the
@@ -614,11 +1123,89 @@ static bool toplevel_is_client_side_decorated(struct polluxdesk_toplevel *toplev
 
 static void toplevel_update_shell_flags(struct polluxdesk_toplevel *toplevel) {
 	toplevel->is_desktop = toplevel_is_desktop_shell(toplevel);
+	toplevel->is_dock = toplevel_is_dock_shell(toplevel);
+	toplevel->is_menu_bar = toplevel_is_menu_bar(toplevel);
 	toplevel->is_overlay = toplevel_is_overlay(toplevel);
-	toplevel->is_borderless = toplevel->is_desktop ||
+	toplevel->is_borderless = toplevel->is_desktop || toplevel->is_dock ||
+		toplevel->is_menu_bar ||
 		toplevel->is_overlay || toplevel_is_login_shell(toplevel);
 	toplevel->client_side_decorated =
 		toplevel_is_client_side_decorated(toplevel);
+}
+
+static void toplevel_update_shadow(struct polluxdesk_toplevel *toplevel,
+		int width, int window_h, bool show_shadows) {
+	int alpha = toplevel->activated
+		? POLLUXDESK_SHADOW_MAX_ALPHA
+		: POLLUXDESK_SHADOW_INACTIVE_ALPHA;
+	wlr_scene_node_set_enabled(&toplevel->shadow->node, show_shadows);
+	if (!show_shadows) {
+		return;
+	}
+	wlr_scene_node_set_position(&toplevel->shadow->node,
+		-POLLUXDESK_SHADOW_BLUR, -POLLUXDESK_SHADOW_BLUR);
+	if (toplevel->shadow_width == width &&
+			toplevel->shadow_height == window_h &&
+			toplevel->shadow_alpha == alpha) {
+		return;
+	}
+	struct wlr_buffer *buffer = shadow_buffer_create(width, window_h, alpha);
+	if (buffer != NULL) {
+		wlr_scene_buffer_set_buffer(toplevel->shadow, buffer);
+		wlr_buffer_drop(buffer);
+		toplevel->shadow_width = width;
+		toplevel->shadow_height = window_h;
+		toplevel->shadow_alpha = alpha;
+	}
+}
+
+static void toplevel_update_title_text(struct polluxdesk_toplevel *toplevel,
+		int width, bool show_titlebar) {
+	const char *title = toplevel->xdg_toplevel->title;
+	if (!show_titlebar || title == NULL || title[0] == '\0') {
+		wlr_scene_node_set_enabled(&toplevel->title_text->node, false);
+		return;
+	}
+	int max_width = width - POLLUXDESK_TITLE_TEXT_LEFT_RESERVED -
+		POLLUXDESK_TITLE_TEXT_SIDE_PADDING;
+	if (max_width < 1) {
+		wlr_scene_node_set_enabled(&toplevel->title_text->node, false);
+		return;
+	}
+	bool needs_render = !toplevel->title_text_valid ||
+		toplevel->title_text_active != toplevel->activated ||
+		toplevel->title_text_max_width != max_width ||
+		toplevel->title_text_value == NULL ||
+		strcmp(toplevel->title_text_value, title) != 0;
+	if (needs_render) {
+		struct wlr_buffer *buffer = title_text_buffer_create(title,
+			toplevel->activated, max_width);
+		char *value = buffer != NULL ? strdup(title) : NULL;
+		if (buffer == NULL || value == NULL) {
+			if (buffer != NULL) {
+				wlr_buffer_drop(buffer);
+			}
+			wlr_scene_node_set_enabled(&toplevel->title_text->node, false);
+			free(value);
+			return;
+		}
+		toplevel->title_text_width = buffer->width;
+		toplevel->title_text_height = buffer->height;
+		wlr_scene_buffer_set_buffer(toplevel->title_text, buffer);
+		wlr_buffer_drop(buffer);
+		free(toplevel->title_text_value);
+		toplevel->title_text_value = value;
+		toplevel->title_text_active = toplevel->activated;
+		toplevel->title_text_max_width = max_width;
+		toplevel->title_text_valid = true;
+	}
+	int usable_width = width - POLLUXDESK_TITLE_TEXT_LEFT_RESERVED -
+		POLLUXDESK_TITLE_TEXT_SIDE_PADDING;
+	int x = POLLUXDESK_TITLE_TEXT_LEFT_RESERVED +
+		(usable_width - toplevel->title_text_width) / 2;
+	int y = (POLLUXDESK_TITLEBAR_HEIGHT - toplevel->title_text_height) / 2;
+	wlr_scene_node_set_position(&toplevel->title_text->node, x, y);
+	wlr_scene_node_set_enabled(&toplevel->title_text->node, true);
 }
 
 static void arrange_toplevel(struct polluxdesk_toplevel *toplevel) {
@@ -645,11 +1232,18 @@ static void arrange_toplevel(struct polluxdesk_toplevel *toplevel) {
 		height = 1;
 	}
 
-	bool no_server_titlebar = toplevel->is_borderless ||
-		toplevel->client_side_decorated;
-	int titlebar_height = no_server_titlebar ? 0 : POLLUXDESK_TITLEBAR_HEIGHT;
+	bool has_server_titlebar = !toplevel->is_borderless &&
+		!toplevel->client_side_decorated;
+	struct polluxdesk_toplevel *menu_bar = server_get_menu_bar(toplevel->server);
+	bool fullscreen_chrome_visible = toplevel->server->fullscreen_chrome_visible ||
+		(menu_bar != NULL && menu_bar->menu_open);
+	bool show_titlebar = has_server_titlebar &&
+		(!toplevel->fullscreen || fullscreen_chrome_visible);
+	int titlebar_height = has_server_titlebar && !toplevel->fullscreen
+		? POLLUXDESK_TITLEBAR_HEIGHT : 0;
 	bool show_shadows = !toplevel->is_borderless && !toplevel->minimized &&
-		!toplevel->maximized;
+		!toplevel->maximized && !toplevel->fullscreen &&
+		!toplevel->restore_geometry_pending;
 
 	/* App content is usually a separate scene subtree below the server
 	 * titlebar. Client-side decorated windows keep their content at y=0 but
@@ -661,38 +1255,38 @@ static void arrange_toplevel(struct polluxdesk_toplevel *toplevel) {
 	int geometry_inset_y = geo.y < 0 ? geo.y : 0;
 	wlr_scene_node_set_position(&toplevel->content_tree->node,
 		0, titlebar_height + geometry_inset_y);
-	wlr_scene_node_set_enabled(&toplevel->titlebar->node, !no_server_titlebar);
+	wlr_scene_node_set_enabled(&toplevel->content_background->node,
+		!toplevel->is_borderless);
+	wlr_scene_node_set_position(&toplevel->content_background->node,
+		0, titlebar_height + geometry_inset_y);
+	wlr_scene_rect_set_size(toplevel->content_background, width, height);
+	wlr_scene_node_set_enabled(&toplevel->titlebar->node, show_titlebar);
 	for (int i = 0; i < 3; ++i) {
 		wlr_scene_node_set_enabled(&toplevel->titlebar_buttons[i]->node,
-			!no_server_titlebar);
+			show_titlebar);
 	}
+	int chrome_y = toplevel->fullscreen ? POLLUXDESK_MENU_BAR_HEIGHT : 0;
+	wlr_scene_node_set_position(&toplevel->titlebar->node, 0, chrome_y);
 
-	/* Compositor-owned macOS drop shadow: one pixmap with a soft
-	 * quadratic falloff. It is regenerated only when the window size
-	 * changes; maximize/minimize just toggles the scene node. */
+	/* Active windows keep the current strong shadow; inactive windows use a
+	 * softer version. The small CPU-generated buffer changes only on resize or
+	 * activation, never during ordinary movement. */
 	int window_h = titlebar_height + height;
-	wlr_scene_node_set_enabled(&toplevel->shadow->node, show_shadows);
-	if (show_shadows) {
-		wlr_scene_node_set_position(&toplevel->shadow->node,
-			-POLLUXDESK_SHADOW_BLUR, -POLLUXDESK_SHADOW_BLUR);
-		if (toplevel->shadow_width != width ||
-				toplevel->shadow_height != window_h) {
-			struct wlr_buffer *buffer = shadow_buffer_create(width, window_h);
-			if (buffer != NULL) {
-				wlr_scene_buffer_set_buffer(toplevel->shadow, buffer);
-				wlr_buffer_drop(buffer);
-				toplevel->shadow_width = width;
-				toplevel->shadow_height = window_h;
-			}
-		}
-	}
+	toplevel_update_shadow(toplevel, width, window_h, show_shadows);
 
-	if (!no_server_titlebar) {
+	if (show_titlebar) {
 		wlr_scene_rect_set_size(toplevel->titlebar, width, POLLUXDESK_TITLEBAR_HEIGHT);
 		for (int i = 0; i < 3; ++i) {
 			wlr_scene_node_set_position(&toplevel->titlebar_buttons[i]->node,
-				14 + i * 22, (POLLUXDESK_TITLEBAR_HEIGHT - POLLUXDESK_BUTTON_SIZE) / 2);
+				14 + i * 22, chrome_y +
+				(POLLUXDESK_TITLEBAR_HEIGHT - POLLUXDESK_BUTTON_SIZE) / 2);
 		}
+	}
+	toplevel_update_title_text(toplevel, width, show_titlebar);
+	if (show_titlebar && chrome_y != 0) {
+		wlr_scene_node_set_position(&toplevel->title_text->node,
+			toplevel->title_text->node.x,
+			toplevel->title_text->node.y + chrome_y);
 	}
 
 	/* Rounded window corners: four tiny wallpaper-colored masks that cover
@@ -700,7 +1294,8 @@ static void arrange_toplevel(struct polluxdesk_toplevel *toplevel) {
 	 * is sampled from the wallpaper gradient at the corner's absolute Y, so
 	 * the patches are regenerated when the window moves vertically. */
 	const int r = POLLUXDESK_WINDOW_RADIUS;
-	bool show_corners = !toplevel->is_borderless && !toplevel->maximized &&
+	bool show_corners = !toplevel->is_borderless && !toplevel->fullscreen &&
+		!toplevel->restore_geometry_pending &&
 		width > r * 2 && window_h > r * 2;
 	int corner_abs_y = -1;
 	if (show_corners) {
@@ -709,13 +1304,17 @@ static void arrange_toplevel(struct polluxdesk_toplevel *toplevel) {
 	for (int i = 0; i < 4; ++i) {
 		wlr_scene_node_set_enabled(&toplevel->corners[i]->node, show_corners);
 	}
-	if (show_corners && toplevel->corner_abs_y != corner_abs_y) {
+	int corner_shadow_alpha = toplevel->maximized ? 0 :
+		(toplevel->activated ? POLLUXDESK_SHADOW_MAX_ALPHA
+			: POLLUXDESK_SHADOW_INACTIVE_ALPHA);
+	if (show_corners && (toplevel->corner_abs_y != corner_abs_y ||
+			toplevel->corner_shadow_alpha != corner_shadow_alpha)) {
 		const int cx[4] = { 0, width - r, 0, width - r };
 		const int cy[4] = { 0, 0, window_h - r, window_h - r };
 		for (int i = 0; i < 4; ++i) {
 			struct wlr_buffer *buffer = corner_mask_buffer_create(
 				toplevel->server, r, i,
-				toplevel->scene_tree->node.y + cy[i]);
+				toplevel->scene_tree->node.y + cy[i], corner_shadow_alpha);
 			if (buffer != NULL) {
 				wlr_scene_buffer_set_buffer(toplevel->corners[i], buffer);
 				wlr_buffer_drop(buffer);
@@ -723,6 +1322,7 @@ static void arrange_toplevel(struct polluxdesk_toplevel *toplevel) {
 			wlr_scene_node_set_position(&toplevel->corners[i]->node, cx[i], cy[i]);
 		}
 		toplevel->corner_abs_y = corner_abs_y;
+		toplevel->corner_shadow_alpha = corner_shadow_alpha;
 	} else if (show_corners) {
 		/* Same gradient band: only reposition (e.g. after a resize). */
 		const int cx[4] = { 0, width - r, 0, width - r };
@@ -748,7 +1348,8 @@ static void arrange_toplevel(struct polluxdesk_toplevel *toplevel) {
 /* Height of the compositor-drawn titlebar for this window (0 when the client
  * draws its own chrome / the window is borderless). */
 static int toplevel_titlebar_height(struct polluxdesk_toplevel *toplevel) {
-	if (toplevel->is_borderless || toplevel->client_side_decorated) {
+	if (toplevel->is_borderless || toplevel->client_side_decorated ||
+		toplevel->fullscreen) {
 		return 0;
 	}
 	return POLLUXDESK_TITLEBAR_HEIGHT;
@@ -783,7 +1384,8 @@ static void toplevel_visible_box(struct polluxdesk_toplevel *toplevel,
 static uint32_t toplevel_resize_edges_at(struct polluxdesk_toplevel *toplevel,
 		double lx, double ly) {
 	if (toplevel->is_desktop || toplevel->is_borderless ||
-			toplevel->is_overlay || toplevel->maximized) {
+			toplevel->is_overlay || toplevel->maximized ||
+		toplevel->fullscreen) {
 		return 0;
 	}
 	struct wlr_box box;
@@ -831,9 +1433,78 @@ static void set_resize_cursor(struct polluxdesk_server *server, uint32_t edges) 
 	}
 }
 
-/* Keep the desktop shell's dropdown menus above regular app windows while a
- * menu is open. When the menu closes, restore the normal desktop order: apps
- * back above the shell, Launchpad overlay on top. */
+static void server_raise_shell_layers(struct polluxdesk_server *server) {
+	struct polluxdesk_toplevel *shell = server_get_desktop(server);
+	struct polluxdesk_toplevel *dock = server_get_dock(server);
+	struct polluxdesk_toplevel *menu_bar = server_get_menu_bar(server);
+	struct polluxdesk_toplevel *fullscreen = server_get_fullscreen(server);
+	struct polluxdesk_toplevel *overlay = server_get_overlay(server);
+	if (dock != NULL) {
+		wlr_scene_node_set_enabled(&dock->scene_tree->node, fullscreen == NULL);
+	}
+	if (menu_bar != NULL) {
+		bool visible = fullscreen == NULL || server->fullscreen_chrome_visible ||
+			menu_bar->menu_open;
+		wlr_scene_node_set_enabled(&menu_bar->scene_tree->node, visible);
+	}
+	if (shell != NULL && shell->menu_open) {
+		wlr_scene_node_raise_to_top(&shell->scene_tree->node);
+	} else {
+		/* Keep ordinary applications above the opaque desktop shell. */
+		struct polluxdesk_toplevel *toplevel;
+		wl_list_for_each_reverse(toplevel, &server->toplevels, link) {
+			if (toplevel->is_desktop || toplevel->is_dock || toplevel->is_overlay ||
+				toplevel->is_menu_bar || toplevel->is_borderless ||
+				toplevel->fullscreen || toplevel->minimized) {
+				continue;
+			}
+			wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
+		}
+	}
+	if (dock != NULL) {
+		if (fullscreen == NULL) {
+			wlr_scene_node_raise_to_top(&dock->scene_tree->node);
+		}
+	}
+	if (fullscreen != NULL) {
+		wlr_scene_node_raise_to_top(&fullscreen->scene_tree->node);
+	}
+	if (menu_bar != NULL && (fullscreen == NULL ||
+			server->fullscreen_chrome_visible || menu_bar->menu_open)) {
+		wlr_scene_node_raise_to_top(&menu_bar->scene_tree->node);
+	}
+	if (overlay != NULL) {
+		wlr_scene_node_raise_to_top(&overlay->scene_tree->node);
+	}
+}
+
+static void server_update_fullscreen_chrome(struct polluxdesk_server *server) {
+	struct polluxdesk_toplevel *fullscreen = server_get_fullscreen(server);
+	if (fullscreen == NULL) {
+		if (server->fullscreen_chrome_visible) {
+			server->fullscreen_chrome_visible = false;
+			server_raise_shell_layers(server);
+		}
+		return;
+	}
+	struct wlr_box output_box;
+	server_get_output_box(server, &output_box);
+	bool visible = server->fullscreen_chrome_visible;
+	if (server->cursor->y <= output_box.y + POLLUXDESK_FULLSCREEN_REVEAL_HEIGHT) {
+		visible = true;
+	} else if (server->cursor->y > output_box.y + POLLUXDESK_FULLSCREEN_HIDE_HEIGHT) {
+		visible = false;
+	}
+	if (visible == server->fullscreen_chrome_visible) {
+		return;
+	}
+	server->fullscreen_chrome_visible = visible;
+	arrange_toplevel(fullscreen);
+	server_raise_shell_layers(server);
+}
+
+/* Menus are part of the desktop surface, so they share its always-on-top
+ * layer with the dock. */
 static void server_update_desktop_menu_layer(struct polluxdesk_server *server,
 		struct polluxdesk_toplevel *desktop, bool open) {
 	if (desktop == NULL || !desktop->is_desktop ||
@@ -841,27 +1512,7 @@ static void server_update_desktop_menu_layer(struct polluxdesk_server *server,
 		return;
 	}
 	desktop->menu_open = open;
-
-	if (open) {
-		wlr_scene_node_raise_to_top(&desktop->scene_tree->node);
-		return;
-	}
-
-	/* Raise every ordinary window and the Launchpad overlay above the
-	 * desktop shell again so apps receive input and remain visible above the
-	 * wallpaper/dock when no dropdown is open. */
-	struct polluxdesk_toplevel *toplevel;
-	wl_list_for_each(toplevel, &server->toplevels, link) {
-		if (toplevel == desktop || toplevel->is_desktop ||
-				toplevel->is_borderless || toplevel->minimized) {
-			continue;
-		}
-		wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
-	}
-	struct polluxdesk_toplevel *overlay = server_get_overlay(server);
-	if (overlay != NULL) {
-		wlr_scene_node_raise_to_top(&overlay->scene_tree->node);
-	}
+	server_raise_shell_layers(server);
 }
 
 /* ---------------------------------------------------------------------------
@@ -922,7 +1573,8 @@ static void write_window_state(struct polluxdesk_server *server) {
 	wl_list_for_each(toplevel, &server->toplevels, link) {
 		/* The desktop shell and the launchpad are not applications: they
 		 * must never collect a running indicator or a window thumbnail. */
-		if (toplevel->is_desktop || toplevel->is_overlay) {
+		if (toplevel->is_desktop || toplevel->is_dock ||
+			toplevel->is_menu_bar || toplevel->is_overlay) {
 			continue;
 		}
 		char app_id[256];
@@ -971,8 +1623,62 @@ static void write_window_state(struct polluxdesk_server *server) {
 	rename(tmp, path);
 }
 
+static void toggle_fullscreen(struct polluxdesk_toplevel *toplevel) {
+	if (toplevel == NULL || toplevel->is_borderless || toplevel->is_dock ||
+			toplevel->is_menu_bar || toplevel->is_overlay) {
+		return;
+	}
+	struct polluxdesk_server *server = toplevel->server;
+	if (!toplevel->fullscreen) {
+		toplevel->fullscreen_restore_maximized = toplevel->maximized;
+		toplevel->fullscreen_restore_geo.x = toplevel->scene_tree->node.x;
+		toplevel->fullscreen_restore_geo.y = toplevel->scene_tree->node.y;
+		toplevel->fullscreen_restore_geo.width =
+			toplevel->xdg_toplevel->base->geometry.width;
+		toplevel->fullscreen_restore_geo.height =
+			toplevel->xdg_toplevel->base->geometry.height;
+		toplevel->fullscreen = true;
+		toplevel->maximized = false;
+		server->fullscreen_chrome_visible = false;
+		struct wlr_box output_box;
+		server_get_output_box(server, &output_box);
+		wlr_scene_node_set_position(&toplevel->scene_tree->node,
+			output_box.x, output_box.y);
+		wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, true);
+		wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel,
+			output_box.width, output_box.height);
+	} else {
+		toplevel->fullscreen = false;
+		wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, false);
+		if (toplevel->fullscreen_restore_maximized) {
+			struct wlr_box workarea_box;
+			server_get_workarea_box(server, &workarea_box);
+			wlr_scene_node_set_position(&toplevel->scene_tree->node,
+				workarea_box.x, workarea_box.y);
+			wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel,
+				workarea_box.width,
+				workarea_box.height - POLLUXDESK_TITLEBAR_HEIGHT);
+			toplevel->maximized = true;
+		} else {
+			wlr_scene_node_set_position(&toplevel->scene_tree->node,
+				toplevel->fullscreen_restore_geo.x,
+				toplevel->fullscreen_restore_geo.y);
+			wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel,
+				toplevel->fullscreen_restore_geo.width,
+				toplevel->fullscreen_restore_geo.height);
+		}
+	}
+	arrange_toplevel(toplevel);
+	server_raise_shell_layers(server);
+	write_window_state(server);
+}
+
 static void toggle_maximize(struct polluxdesk_toplevel *toplevel) {
-	if (toplevel->is_desktop) {
+	if (toplevel->is_desktop || toplevel->is_dock) {
+		return;
+	}
+	if (toplevel->fullscreen) {
+		toggle_fullscreen(toplevel);
 		return;
 	}
 	struct polluxdesk_server *server = toplevel->server;
@@ -983,13 +1689,14 @@ static void toggle_maximize(struct polluxdesk_toplevel *toplevel) {
 		toplevel->restore_geo.height = toplevel->xdg_toplevel->base->geometry.height;
 
 		struct wlr_box output_box;
-		server_get_output_box(server, &output_box);
+		server_get_workarea_box(server, &output_box);
 		wlr_scene_node_set_position(&toplevel->scene_tree->node,
 			output_box.x, output_box.y);
 		wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel,
 			output_box.width, output_box.height - POLLUXDESK_TITLEBAR_HEIGHT);
 		wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel, true);
 		toplevel->maximized = true;
+		toplevel->restore_geometry_pending = false;
 	} else {
 		wlr_scene_node_set_position(&toplevel->scene_tree->node,
 			toplevel->restore_geo.x, toplevel->restore_geo.y);
@@ -997,8 +1704,47 @@ static void toggle_maximize(struct polluxdesk_toplevel *toplevel) {
 			toplevel->restore_geo.width, toplevel->restore_geo.height);
 		wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel, false);
 		toplevel->maximized = false;
+		toplevel->restore_geometry_pending = true;
 	}
+	arrange_toplevel(toplevel);
+	server_raise_shell_layers(server);
 	write_window_state(server);
+}
+
+static void restore_maximized_under_pointer(
+		struct polluxdesk_toplevel *toplevel, double cursor_x, double cursor_y) {
+	struct polluxdesk_server *server = toplevel->server;
+	struct wlr_box maximized_box, output_box, workarea_box;
+	toplevel_visible_box(toplevel, &maximized_box);
+	server_get_output_box(server, &output_box);
+	server_get_workarea_box(server, &workarea_box);
+	double fraction = maximized_box.width > 0
+		? (cursor_x - maximized_box.x) / maximized_box.width : 0.5;
+	if (fraction < 0.0) { fraction = 0.0; }
+	if (fraction > 1.0) { fraction = 1.0; }
+	double titlebar_offset = cursor_y - maximized_box.y;
+	if (titlebar_offset < 0.0) { titlebar_offset = 0.0; }
+	if (titlebar_offset > POLLUXDESK_TITLEBAR_HEIGHT) {
+		titlebar_offset = POLLUXDESK_TITLEBAR_HEIGHT;
+	}
+	int restore_width = toplevel->restore_geo.width > 0
+		? toplevel->restore_geo.width : maximized_box.width;
+	toggle_maximize(toplevel);
+
+	/* Restore the pre-maximized window beneath the pointer, preserving where
+	 * along the titlebar it was grabbed rather than jumping to its old screen
+	 * coordinates. */
+	double restore_x = cursor_x - fraction * restore_width;
+	int max_x = output_box.x + output_box.width - restore_width;
+	if (max_x < output_box.x) { max_x = output_box.x; }
+	if (restore_x < output_box.x) { restore_x = output_box.x; }
+	if (restore_x > max_x) { restore_x = max_x; }
+	double restore_y = cursor_y - titlebar_offset;
+	if (restore_y < workarea_box.y) { restore_y = workarea_box.y; }
+	wlr_scene_node_set_position(&toplevel->scene_tree->node,
+		(int)restore_x, (int)restore_y);
+	arrange_toplevel(toplevel);
+	server_raise_shell_layers(server);
 }
 
 static void minimize_toplevel(struct polluxdesk_toplevel *toplevel) {
@@ -1016,6 +1762,9 @@ static void minimize_toplevel(struct polluxdesk_toplevel *toplevel) {
 	toplevel->pending_thumb = true;
 	clock_gettime(CLOCK_MONOTONIC, &toplevel->thumb_since);
 	wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, false);
+	toplevel->activated = false;
+	arrange_toplevel(toplevel);
+	server_raise_shell_layers(toplevel->server);
 	write_window_state(toplevel->server);
 }
 
@@ -1078,7 +1827,8 @@ static void begin_interactive(struct polluxdesk_toplevel *toplevel,
 
 static void focus_toplevel(struct polluxdesk_toplevel *toplevel) {
 	/* Note: this function only deals with keyboard focus. */
-	if (toplevel == NULL || toplevel->is_desktop) {
+	if (toplevel == NULL || toplevel->is_desktop || toplevel->is_dock ||
+		toplevel->is_menu_bar) {
 		/* The desktop wallpaper shell never takes keyboard focus; the
 		 * borderless login shell does. */
 		return;
@@ -1107,6 +1857,9 @@ static void focus_toplevel(struct polluxdesk_toplevel *toplevel) {
 	if (prev_surface == surface) {
 		/* Don't re-focus an already focused surface. Restoring a minimized
 		 * window lands here, so the state still has to be published. */
+		toplevel->activated = true;
+		arrange_toplevel(toplevel);
+		server_raise_shell_layers(server);
 		write_window_state(server);
 		return;
 	}
@@ -1120,6 +1873,14 @@ static void focus_toplevel(struct polluxdesk_toplevel *toplevel) {
 			wlr_xdg_toplevel_try_from_wlr_surface(prev_surface);
 		if (prev_toplevel != NULL) {
 			wlr_xdg_toplevel_set_activated(prev_toplevel, false);
+			if (prev_toplevel->base != NULL && prev_toplevel->base->data != NULL) {
+				struct wlr_scene_tree *tree = prev_toplevel->base->data;
+				struct polluxdesk_toplevel *previous = tree->node.data;
+				if (previous != NULL) {
+					previous->activated = false;
+					arrange_toplevel(previous);
+				}
+			}
 		}
 	}
 	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
@@ -1129,6 +1890,8 @@ static void focus_toplevel(struct polluxdesk_toplevel *toplevel) {
 	wl_list_insert(&server->toplevels, &toplevel->link);
 	/* Activate the new surface */
 	wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, true);
+	toplevel->activated = true;
+	arrange_toplevel(toplevel);
 	/*
 	 * Tell the seat to have the keyboard enter this surface. wlroots will keep
 	 * track of this and automatically send key events to the appropriate
@@ -1138,6 +1901,7 @@ static void focus_toplevel(struct polluxdesk_toplevel *toplevel) {
 		wlr_seat_keyboard_notify_enter(seat, surface,
 			keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
 	}
+	server_raise_shell_layers(server);
 	write_window_state(server);
 }
 
@@ -1197,6 +1961,29 @@ static bool handle_keybinding(struct polluxdesk_server *server, xkb_keysym_t sym
 			wl_container_of(server->toplevels.prev, next_toplevel, link);
 		focus_toplevel(next_toplevel);
 		break;
+	case XKB_KEY_F11: {
+		struct wlr_surface *surface = server->seat != NULL
+			? server->seat->keyboard_state.focused_surface : NULL;
+		struct wlr_xdg_toplevel *xdg_toplevel = surface != NULL
+			? wlr_xdg_toplevel_try_from_wlr_surface(surface) : NULL;
+		if (xdg_toplevel != NULL && xdg_toplevel->base->data != NULL) {
+			struct wlr_scene_tree *tree = xdg_toplevel->base->data;
+			struct polluxdesk_toplevel *toplevel = tree->node.data;
+			toggle_fullscreen(toplevel);
+		}
+		break;
+	}
+	case XKB_KEY_F10: {
+		struct wlr_surface *surface = server->seat != NULL
+			? server->seat->keyboard_state.focused_surface : NULL;
+		struct wlr_xdg_toplevel *xdg_toplevel = surface != NULL
+			? wlr_xdg_toplevel_try_from_wlr_surface(surface) : NULL;
+		if (xdg_toplevel != NULL && xdg_toplevel->base->data != NULL) {
+			struct wlr_scene_tree *tree = xdg_toplevel->base->data;
+			toggle_maximize(tree->node.data);
+		}
+		break;
+	}
 	default:
 		return false;
 	}
@@ -1221,12 +2008,14 @@ static void keyboard_handle_key(
 
 	bool handled = false;
 	uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
-	if ((modifiers & WLR_MODIFIER_ALT) &&
-			event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+	if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 		/* If alt is held down and this button was _pressed_, we attempt to
-		 * process it as a compositor keybinding. */
+		 * process it as a compositor keybinding. F11 toggles fullscreen on its
+		 * own as well, matching the usual desktop shortcut. */
 		for (int i = 0; i < nsyms; i++) {
-			handled = handle_keybinding(server, syms[i]);
+			if ((modifiers & WLR_MODIFIER_ALT) || syms[i] == XKB_KEY_F11) {
+				handled = handle_keybinding(server, syms[i]);
+			}
 		}
 	}
 
@@ -1503,27 +2292,127 @@ static struct polluxdesk_toplevel *scene_node_get_toplevel(struct wlr_scene_node
 	return node != NULL ? node->data : NULL;
 }
 
+static bool desktop_shell_consumes_input(struct polluxdesk_server *server,
+		struct polluxdesk_toplevel *desktop, double lx, double ly) {
+	(void)lx;
+	if (desktop->menu_open) {
+		return true;
+	}
+	struct wlr_box box;
+	server_get_output_box(server, &box);
+	return ly < box.y + POLLUXDESK_SHELL_BAR_HIT_HEIGHT ||
+		ly >= box.y + box.height - POLLUXDESK_DOCK_WORKAREA_HEIGHT;
+}
+
+static bool dock_shell_consumes_input(struct polluxdesk_server *server,
+		struct polluxdesk_toplevel *dock, double lx, double ly) {
+	if (dock->menu_open) {
+		return true;
+	}
+	if (dock->dock_hit_box_valid) {
+		const struct wlr_box *hit = &dock->dock_hit_box;
+		if (lx < hit->x || lx >= hit->x + hit->width ||
+				ly < hit->y || ly >= hit->y + hit->height) {
+			return false;
+		}
+		int radius = dock->dock_hit_radius;
+		if (radius > hit->width / 2) { radius = hit->width / 2; }
+		if (radius > hit->height / 2) { radius = hit->height / 2; }
+		if (radius <= 0) {
+			return true;
+		}
+		double nearest_x = fmin(fmax(lx, hit->x + radius),
+			hit->x + hit->width - radius);
+		double nearest_y = fmin(fmax(ly, hit->y + radius),
+			hit->y + hit->height - radius);
+		double dx = lx - nearest_x;
+		double dy = ly - nearest_y;
+		return dx * dx + dy * dy <= (double)radius * radius;
+	}
+	struct wlr_box box;
+	server_get_output_box(server, &box);
+	return ly >= box.y + box.height - POLLUXDESK_DOCK_WORKAREA_HEIGHT;
+}
+
+static struct wlr_scene_node *scene_node_at_toplevel(
+		struct polluxdesk_toplevel *toplevel, double lx, double ly,
+		double *sx, double *sy) {
+	struct wlr_scene_node *node = wlr_scene_node_at(
+		&toplevel->scene_tree->node, lx, ly, sx, sy);
+	if (node == &toplevel->shadow->node) {
+		return NULL;
+	}
+	for (int i = 0; i < 4; ++i) {
+		if (node == &toplevel->corners[i]->node) {
+			return NULL;
+		}
+	}
+	return node;
+}
+
+static uint32_t toplevel_resize_edges_at(struct polluxdesk_toplevel *toplevel,
+		double lx, double ly);
+
 static struct polluxdesk_toplevel *desktop_toplevel_at(
 		struct polluxdesk_server *server, double lx, double ly,
-		struct wlr_surface **surface, double *sx, double *sy) {
-	/* This returns the topmost surface node in the scene at the given layout
-	 * coordinates. Server-drawn titlebar rects are intentionally NOT surfaces:
-	 * the compositor owns them, the client never receives pointer events for
-	 * them, and the app content stays a separate subtree. */
+		struct wlr_surface **surface, double *sx, double *sy,
+		struct wlr_scene_node **result_node) {
+	/* The dock toplevel is full-screen for transparent positioning, but only
+	 * its bottom work-area band consumes input; elsewhere hit-test through it. */
+	if (surface != NULL) {
+		*surface = NULL;
+	}
 	struct wlr_scene_node *node = wlr_scene_node_at(
 		&server->scene->tree.node, lx, ly, sx, sy);
-	if (node == NULL || node->type != WLR_SCENE_NODE_BUFFER) {
-		return NULL;
+	struct polluxdesk_toplevel *toplevel = scene_node_get_toplevel(node);
+	bool passthrough = toplevel != NULL &&
+		((toplevel->is_desktop &&
+			!desktop_shell_consumes_input(server, toplevel, lx, ly)) ||
+		 (toplevel->is_dock &&
+			!dock_shell_consumes_input(server, toplevel, lx, ly)));
+	if (passthrough) {
+		struct polluxdesk_toplevel *passthrough_shell = toplevel;
+		struct polluxdesk_toplevel *candidate;
+		wl_list_for_each(candidate, &server->toplevels, link) {
+			if (candidate->is_borderless || candidate->minimized) {
+				continue;
+			}
+			struct wlr_scene_node *app_node = scene_node_at_toplevel(
+				candidate, lx, ly, sx, sy);
+			/* The rounded-corner masks are visual-only and are skipped above,
+			 * but those exact corner pixels still belong to the resize frame. */
+			if (app_node != NULL ||
+				toplevel_resize_edges_at(candidate, lx, ly) != 0) {
+				node = app_node;
+				toplevel = candidate;
+				break;
+			}
+		}
+		/* Outside the visible dock and any application, pass events to the
+		 * desktop instead of swallowing them in the dock's fullscreen surface. */
+		if (passthrough_shell->is_dock && toplevel == passthrough_shell) {
+			struct polluxdesk_toplevel *desktop = server_get_desktop(server);
+			if (desktop != NULL) {
+				node = wlr_scene_node_at(&desktop->scene_tree->node,
+					lx, ly, sx, sy);
+				toplevel = desktop;
+			}
+		}
 	}
-	struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
-	struct wlr_scene_surface *scene_surface =
-		wlr_scene_surface_try_from_buffer(scene_buffer);
-	if (!scene_surface) {
-		return NULL;
+	if (result_node != NULL) {
+		*result_node = node;
 	}
-
-	*surface = scene_surface->surface;
-	return scene_node_get_toplevel(node);
+	if (node != NULL && node->type == WLR_SCENE_NODE_BUFFER) {
+		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
+		struct wlr_scene_surface *scene_surface =
+			wlr_scene_surface_try_from_buffer(scene_buffer);
+		if (scene_surface != NULL) {
+			if (surface != NULL) {
+				*surface = scene_surface->surface;
+			}
+		}
+	}
+	return toplevel;
 }
 
 static int titlebar_button_at(struct polluxdesk_toplevel *toplevel,
@@ -1545,14 +2434,232 @@ static void reset_cursor_mode(struct polluxdesk_server *server) {
 	/* Reset the cursor mode to passthrough. */
 	server->cursor_mode = POLLUXDESK_CURSOR_PASSTHROUGH;
 	server->grabbed_toplevel = NULL;
+	server_set_maximize_preview(server, false);
+	server->maximize_restore_pending = false;
+	server->drag_pending_x = server->drag_pending_y = 0.0;
+	server->drag_pending_token_x = server->drag_pending_token_y = 0;
+	server->drag_released_token_x = server->drag_released_token_y = 0;
+	server->drag_released_sign_x = server->drag_released_sign_y = 0;
+}
+
+/* Return true only when the actual window frame reaches or crosses an edge;
+ * the compositor shadow is deliberately excluded from the hit geometry. */
+static bool drag_edge_is_near(double position, double delta,
+		double boundary, int direction, double speed) {
+	if (delta * direction <= 0.0 || speed >= POLLUXDESK_DRAG_SLOW_SPEED) {
+		return false;
+	}
+	double before = (position - boundary) * direction;
+	double after = before + delta * direction;
+	/* Trigger only on the motion that reaches the frame-to-frame contact line,
+	 * or while the frame is still exactly at that line. */
+	return (before <= 0.0 && after >= 0.0) ||
+		(before >= 0.0 && before <= 1.0);
+}
+
+static uint64_t drag_window_edge_token(struct polluxdesk_toplevel *other,
+		unsigned int edge) {
+	return UINT64_C(0x8000000000000000) ^
+		((uint64_t)(uintptr_t)other << 3) ^ edge;
+}
+
+static void drag_record_edge(uint64_t *token, bool near_edge,
+		uint64_t candidate) {
+	if (*token == 0 && near_edge) {
+		*token = candidate;
+	}
+}
+
+static bool drag_axis_resisted(struct polluxdesk_server *server,
+		double *delta, uint64_t edge_token, double speed,
+		double breakaway_px, bool horizontal) {
+	if (*delta == 0.0) {
+		return false;
+	}
+	double *pending = horizontal
+		? &server->drag_pending_x : &server->drag_pending_y;
+	uint64_t *pending_token = horizontal
+		? &server->drag_pending_token_x : &server->drag_pending_token_y;
+	uint64_t *released_token = horizontal
+		? &server->drag_released_token_x : &server->drag_released_token_y;
+	int *released_sign = horizontal
+		? &server->drag_released_sign_x : &server->drag_released_sign_y;
+	int direction = *delta > 0.0 ? 1 : -1;
+	if (*released_token != 0 && direction != *released_sign) {
+		*released_token = 0;
+		*released_sign = 0;
+		*pending = 0.0;
+		*pending_token = 0;
+	}
+	if (speed >= POLLUXDESK_DRAG_SLOW_SPEED || edge_token == 0) {
+		*pending = 0.0;
+		*pending_token = 0;
+		if (edge_token == 0) {
+			*released_token = 0;
+			*released_sign = 0;
+		}
+		return false;
+	}
+	if (*released_token == edge_token) {
+		return false;
+	}
+	if (*pending_token != edge_token) {
+		*pending = 0.0;
+		*pending_token = edge_token;
+	}
+	*pending += *delta;
+	if (fabs(*pending) < breakaway_px) {
+		*delta = 0.0;
+		return true;
+	}
+	/* The cursor has overcome static friction. Discard the held distance and
+	 * let only this and subsequent pointer motion move the frame, avoiding a
+	 * catch-up jump. */
+	*pending = 0.0;
+	*pending_token = 0;
+	*released_token = edge_token;
+	*released_sign = direction;
+	return false;
+}
+
+static void apply_window_edge_resistance(struct polluxdesk_server *server,
+		struct polluxdesk_toplevel *toplevel, double *dx, double *dy,
+		double speed_x, double speed_y) {
+	struct wlr_box output_box, workarea_box, moving_box;
+	server_get_output_box(server, &output_box);
+	server_get_workarea_box(server, &workarea_box);
+	toplevel_visible_box(toplevel, &moving_box);
+	double x = toplevel->scene_tree->node.x;
+	double y = toplevel->scene_tree->node.y;
+
+	/* Only the visible frame is a snap edge; its compositor shadow is not part
+	 * of the geometry. Keep the edge keys distinct so breaking free of the dock
+	 * does not disable resistance at the physical display edge farther down. */
+	uint64_t edge_x = 0, edge_y = 0;
+	drag_record_edge(&edge_x,
+		drag_edge_is_near(x, *dx, output_box.x, -1, speed_x),
+		POLLUXDESK_EDGE_TOKEN_SCREEN_LEFT);
+	drag_record_edge(&edge_x,
+		drag_edge_is_near(x, *dx,
+			output_box.x + output_box.width - moving_box.width, 1, speed_x),
+		POLLUXDESK_EDGE_TOKEN_SCREEN_RIGHT);
+	drag_record_edge(&edge_y,
+		drag_edge_is_near(y, *dy, output_box.y, -1, speed_y),
+		POLLUXDESK_EDGE_TOKEN_SCREEN_TOP);
+	drag_record_edge(&edge_y,
+		drag_edge_is_near(y, *dy,
+			workarea_box.y, -1, speed_y),
+		POLLUXDESK_EDGE_TOKEN_MENU_BAR);
+	drag_record_edge(&edge_y,
+		drag_edge_is_near(y, *dy,
+			workarea_box.y + workarea_box.height - moving_box.height,
+			1, speed_y), POLLUXDESK_EDGE_TOKEN_DOCK);
+	drag_record_edge(&edge_y,
+		drag_edge_is_near(y, *dy,
+			output_box.y + output_box.height - moving_box.height,
+			1, speed_y), POLLUXDESK_EDGE_TOKEN_SCREEN_BOTTOM);
+
+	/* Window edges have the same soft resistance when slowly crossing another
+	 * window. This gives side-by-side windows a subtle magnetic seam without
+	 * preventing intentional overlap or fast movement. */
+	struct polluxdesk_toplevel *other;
+	wl_list_for_each(other, &server->toplevels, link) {
+		if (other == toplevel || other->is_borderless || other->minimized) {
+			continue;
+		}
+		struct wlr_box other_box;
+		toplevel_visible_box(other, &other_box);
+		bool vertical_overlap = moving_box.y < other_box.y + other_box.height &&
+			moving_box.y + moving_box.height > other_box.y;
+		bool horizontal_overlap = moving_box.x < other_box.x + other_box.width &&
+			moving_box.x + moving_box.width > other_box.x;
+		/* Only an opposing visible frame edge is a magnetic stop. Once two
+		 * windows overlap, ignore the hidden far edge so a covered window's
+		 * shadow/frame cannot create an early resistance point. */
+		if (vertical_overlap && *dx > 0.0 &&
+				moving_box.x + moving_box.width <= other_box.x) {
+			drag_record_edge(&edge_x,
+				drag_edge_is_near(x, *dx,
+					other_box.x - moving_box.width, 1, speed_x),
+				drag_window_edge_token(other, 1));
+		} else if (vertical_overlap && *dx < 0.0 &&
+				moving_box.x >= other_box.x + other_box.width) {
+			drag_record_edge(&edge_x,
+				drag_edge_is_near(x, *dx,
+					other_box.x + other_box.width, -1, speed_x),
+				drag_window_edge_token(other, 2));
+		}
+		if (horizontal_overlap && *dy > 0.0 &&
+				moving_box.y + moving_box.height <= other_box.y) {
+			drag_record_edge(&edge_y,
+				drag_edge_is_near(y, *dy,
+					other_box.y - moving_box.height, 1, speed_y),
+				drag_window_edge_token(other, 5));
+		} else if (horizontal_overlap && *dy < 0.0 &&
+				moving_box.y >= other_box.y + other_box.height) {
+			drag_record_edge(&edge_y,
+				drag_edge_is_near(y, *dy,
+					other_box.y + other_box.height, -1, speed_y),
+				drag_window_edge_token(other, 6));
+		}
+	}
+	struct wlr_output *primary = server_get_primary_output(server);
+	double breakaway_px = POLLUXDESK_DRAG_BREAKAWAY_FALLBACK_PX;
+	if (primary != NULL && primary->width > 0 && primary->phys_width > 0) {
+		breakaway_px = (double)primary->width * POLLUXDESK_DRAG_BREAKAWAY_MM /
+			(double)primary->phys_width;
+		if (breakaway_px < 12.0) { breakaway_px = 12.0; }
+		if (breakaway_px > 96.0) { breakaway_px = 96.0; }
+	}
+	drag_axis_resisted(server, dx, edge_x, speed_x, breakaway_px, true);
+	drag_axis_resisted(server, dy, edge_y, speed_y, breakaway_px, false);
 }
 
 static void process_cursor_move(struct polluxdesk_server *server) {
-	/* Move the grabbed toplevel to the new position. */
+	/* Integrate pointer deltas so edge resistance can be applied only to slow
+	 * movement; the cursor itself remains completely unaffected. */
 	struct polluxdesk_toplevel *toplevel = server->grabbed_toplevel;
+	if (server->maximize_restore_pending) {
+		double moved_x = server->cursor->x - server->maximize_restore_start_x;
+		double moved_y = server->cursor->y - server->maximize_restore_start_y;
+		if (sqrt(moved_x * moved_x + moved_y * moved_y) <
+				POLLUXDESK_MAXIMIZED_DRAG_RESTORE_THRESHOLD) {
+			clock_gettime(CLOCK_MONOTONIC, &server->drag_last_time);
+			server->drag_last_x = server->cursor->x;
+			server->drag_last_y = server->cursor->y;
+			return;
+		}
+		server->maximize_restore_pending = false;
+		restore_maximized_under_pointer(toplevel,
+			server->cursor->x, server->cursor->y);
+		clock_gettime(CLOCK_MONOTONIC, &server->drag_last_time);
+		server->drag_last_x = server->cursor->x;
+		server->drag_last_y = server->cursor->y;
+		return;
+	}
+	struct wlr_box workarea;
+	server_get_workarea_box(server, &workarea);
+	bool show_maximize_preview = !toplevel->maximized && !toplevel->fullscreen &&
+		server->cursor->y < workarea.y;
+	server_set_maximize_preview(server, show_maximize_preview);
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	double dx = server->cursor->x - server->drag_last_x;
+	double dy = server->cursor->y - server->drag_last_y;
+	double elapsed = (now.tv_sec - server->drag_last_time.tv_sec) +
+		(now.tv_nsec - server->drag_last_time.tv_nsec) / 1000000000.0;
+	double speed = elapsed > 0.0 ? sqrt(dx * dx + dy * dy) / elapsed : 1e9;
+	server->drag_last_x = server->cursor->x;
+	server->drag_last_y = server->cursor->y;
+	server->drag_last_time = now;
+	apply_window_edge_resistance(server, toplevel, &dx, &dy,
+		speed, speed);
+	double next_y = toplevel->scene_tree->node.y + dy;
+	if (next_y < workarea.y) {
+		next_y = workarea.y;
+	}
 	wlr_scene_node_set_position(&toplevel->scene_tree->node,
-		server->cursor->x - server->grab_x,
-		server->cursor->y - server->grab_y);
+		toplevel->scene_tree->node.x + dx, (int)next_y);
 }
 
 static void process_cursor_resize(struct polluxdesk_server *server) {
@@ -1573,9 +2680,14 @@ static void process_cursor_resize(struct polluxdesk_server *server) {
 	int new_right = server->grab_geobox.x + server->grab_geobox.width;
 	int new_top = server->grab_geobox.y;
 	int new_bottom = server->grab_geobox.y + server->grab_geobox.height;
+	struct wlr_box workarea_box;
+	server_get_workarea_box(server, &workarea_box);
 
 	if (server->resize_edges & WLR_EDGE_TOP) {
 		new_top = border_y;
+		if (new_top < workarea_box.y) {
+			new_top = workarea_box.y;
+		}
 		if (new_top >= new_bottom) {
 			new_top = new_bottom - 1;
 		}
@@ -1615,6 +2727,7 @@ static void process_cursor_resize(struct polluxdesk_server *server) {
 }
 
 static void process_cursor_motion(struct polluxdesk_server *server, uint32_t time) {
+	server_update_fullscreen_chrome(server);
 	/* If the mode is non-passthrough, delegate to those functions. */
 	if (server->cursor_mode == POLLUXDESK_CURSOR_MOVE) {
 		process_cursor_move(server);
@@ -1628,16 +2741,13 @@ static void process_cursor_motion(struct polluxdesk_server *server, uint32_t tim
 	double sx, sy;
 	struct wlr_seat *seat = server->seat;
 	struct wlr_surface *surface = NULL;
+	struct wlr_scene_node *node = NULL;
 	struct polluxdesk_toplevel *toplevel = desktop_toplevel_at(server,
-			server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+			server->cursor->x, server->cursor->y, &surface, &sx, &sy, &node);
 
 	/* Server-drawn borders: show a resize cursor and keep the border events
 	 * inside the compositor so clients only see content-area pointer input. */
-	struct wlr_scene_node *node = wlr_scene_node_at(
-			&server->scene->tree.node, server->cursor->x,
-			server->cursor->y, &sx, &sy);
-	struct polluxdesk_toplevel *hover_toplevel = node ?
-		scene_node_get_toplevel(node) : NULL;
+	struct polluxdesk_toplevel *hover_toplevel = toplevel;
 	uint32_t edges = hover_toplevel ?
 		toplevel_resize_edges_at(hover_toplevel,
 			server->cursor->x, server->cursor->y) : 0;
@@ -1721,15 +2831,22 @@ static void server_cursor_motion_absolute(
 static void server_cursor_button(struct wl_listener *listener, void *data) {
 	/* This event is forwarded by the cursor when a pointer emits a button
 	 * event. Button presses on the server-drawn titlebar stay in the
-	 * compositor: titlebar = move, traffic lights = close/minimize/maximize. */
+	 * compositor: titlebar = move, traffic lights = close/minimize/fullscreen. */
 	struct polluxdesk_server *server =
 		wl_container_of(listener, server, cursor_button);
 	struct wlr_pointer_button_event *event = data;
 
 	if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
+		struct polluxdesk_toplevel *maximize_target =
+			server->cursor_mode == POLLUXDESK_CURSOR_MOVE &&
+			server->maximize_preview_active
+				? server->grabbed_toplevel : NULL;
 		wlr_seat_pointer_notify_button(server->seat,
 			event->time_msec, event->button, event->state);
 		reset_cursor_mode(server);
+		if (maximize_target != NULL) {
+			toggle_maximize(maximize_target);
+		}
 		return;
 	}
 
@@ -1740,9 +2857,9 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 	}
 
 	double sx, sy;
-	struct wlr_scene_node *node = wlr_scene_node_at(
-		&server->scene->tree.node, server->cursor->x, server->cursor->y, &sx, &sy);
-	struct polluxdesk_toplevel *toplevel = scene_node_get_toplevel(node);
+	struct wlr_scene_node *node = NULL;
+	struct polluxdesk_toplevel *toplevel = desktop_toplevel_at(server,
+		server->cursor->x, server->cursor->y, NULL, &sx, &sy, &node);
 	if (toplevel == NULL) {
 		wlr_seat_pointer_notify_button(server->seat,
 			event->time_msec, event->button, event->state);
@@ -1787,7 +2904,8 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 
 	focus_toplevel(toplevel);
 
-	if (node == &toplevel->titlebar->node) {
+	if ((node == &toplevel->titlebar->node ||
+			node == &toplevel->title_text->node) && !toplevel->fullscreen) {
 		/* Drag the window by its compositor titlebar, macOS style. */
 		begin_interactive(toplevel, POLLUXDESK_CURSOR_MOVE, 0);
 		return;
@@ -1806,15 +2924,12 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 	} else if (button == POLLUXDESK_BUTTON_MINIMIZE) {
 		minimize_toplevel(toplevel);
 		return;
-	} else if (button == POLLUXDESK_BUTTON_MAXIMIZE) {
-		toggle_maximize(toplevel);
+	} else if (button == POLLUXDESK_BUTTON_FULLSCREEN) {
+		toggle_fullscreen(toplevel);
 		return;
 	}
 
-	/* App content: pass the event through to the client surface. */
-	struct wlr_surface *surface = NULL;
-	desktop_toplevel_at(server, server->cursor->x, server->cursor->y,
-		&surface, &sx, &sy);
+	/* App content: pass the event through to the current pointer focus. */
 	wlr_seat_pointer_notify_button(server->seat,
 		event->time_msec, event->button, event->state);
 }
@@ -2055,9 +3170,43 @@ static void xdg_toplevel_set_title(struct wl_listener *listener, void *data) {
 	struct polluxdesk_toplevel *toplevel = wl_container_of(listener, toplevel, set_title);
 	toplevel_update_shell_flags(toplevel);
 	const char *title = toplevel->xdg_toplevel->title;
-	bool menu_open = toplevel->is_desktop && title != NULL &&
+	bool desktop_menu_open = toplevel->is_desktop && title != NULL &&
 		strcmp(title, "PolluxOS Desktop (menu)") == 0;
-	server_update_desktop_menu_layer(toplevel->server, toplevel, menu_open);
+	server_update_desktop_menu_layer(toplevel->server, toplevel,
+		desktop_menu_open);
+	if (toplevel->is_dock) {
+		const char *area_text = title != NULL ? strstr(title, "(area:") : NULL;
+		int menu_open = 0;
+		if (area_text != NULL) {
+			int x, y, width, height, radius;
+			if (sscanf(area_text, "(area:%d,%d,%d,%d,%d;menu:%d)",
+					&x, &y, &width, &height, &radius, &menu_open) == 6 &&
+					width > 0 && height > 0) {
+				toplevel->dock_hit_box = (struct wlr_box){
+					.x = x, .y = y, .width = width, .height = height,
+				};
+				toplevel->dock_hit_radius = radius;
+				toplevel->dock_hit_box_valid = true;
+				toplevel->menu_open = menu_open != 0;
+			}
+		} else {
+			toplevel->dock_hit_box_valid = false;
+			toplevel->menu_open = title != NULL &&
+				strcmp(title, "PolluxOS Dock (menu)") == 0;
+		}
+		toplevel_update_dock_glass(toplevel);
+		server_raise_shell_layers(toplevel->server);
+	}
+	if (toplevel->is_menu_bar) {
+		toplevel->menu_open = title != NULL &&
+			strncmp(title, "PolluxOS MenuBar (menu:", 23) == 0;
+		struct polluxdesk_toplevel *fullscreen =
+			server_get_fullscreen(toplevel->server);
+		if (fullscreen != NULL) {
+			arrange_toplevel(fullscreen);
+		}
+		server_raise_shell_layers(toplevel->server);
+	}
 
 	/* The same one-way channel carries restore requests from the dock's
 	 * minimized-window shelf: the shell retitles itself to
@@ -2069,6 +3218,11 @@ static void xdg_toplevel_set_title(struct wl_listener *listener, void *data) {
 		restore_minimized(toplevel->server,
 			strtoul(title + 26, NULL, 10));
 	}
+	if (toplevel->is_dock && title != NULL &&
+			strncmp(title, "PolluxOS Dock (restore:", 23) == 0) {
+		restore_minimized(toplevel->server,
+			strtoul(title + 23, NULL, 10));
+	}
 	/* The shell has the thumbnail; the window can come down now. */
 	if (toplevel->is_desktop && title != NULL &&
 			strncmp(title, "PolluxOS Desktop (thumb-ready:", 30) == 0) {
@@ -2078,8 +3232,24 @@ static void xdg_toplevel_set_title(struct wl_listener *listener, void *data) {
 	if (toplevel->is_borderless && toplevel->xdg_toplevel->base->initialized) {
 		struct wlr_box output_box;
 		server_get_output_box(toplevel->server, &output_box);
+		int surface_height = output_box.height;
+		if (toplevel->is_menu_bar) {
+			surface_height = POLLUXDESK_MENU_BAR_HEIGHT;
+			if (toplevel->menu_open && title != NULL) {
+				const char *height_text = strchr(title, ':');
+				if (height_text != NULL) {
+					int requested_height = atoi(height_text + 1);
+					if (requested_height > surface_height) {
+						surface_height = requested_height;
+					}
+				}
+			}
+			if (surface_height > output_box.height) {
+				surface_height = output_box.height;
+			}
+		}
 		wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel,
-			output_box.width, output_box.height);
+			output_box.width, surface_height);
 		wlr_scene_node_set_position(&toplevel->scene_tree->node,
 			output_box.x, output_box.y);
 	}
@@ -2092,7 +3262,7 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 	struct polluxdesk_toplevel *toplevel = wl_container_of(listener, toplevel, map);
 
 	/* The dui shell is the desktop background: keep it at the bottom and never
-	 * focus it. Regular apps cascade and get keyboard focus. */
+	 * focus it. New application windows open centered on the output. */
 	if (toplevel->is_desktop) {
 		struct wlr_box output_box;
 		server_get_output_box(toplevel->server, &output_box);
@@ -2104,9 +3274,15 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 		wlr_scene_node_set_position(&toplevel->scene_tree->node,
 			output_box.x, output_box.y);
 	} else {
-		int cascade = (int)(wl_list_length(&toplevel->server->toplevels) % 6);
+		struct wlr_box output_box, window_box;
+		server_get_output_box(toplevel->server, &output_box);
+		toplevel_visible_box(toplevel, &window_box);
+		int x = output_box.x + (output_box.width - window_box.width) / 2;
+		int y = output_box.y + (output_box.height - window_box.height) / 2;
+		if (x < output_box.x) { x = output_box.x; }
+		if (y < output_box.y) { y = output_box.y; }
 		wlr_scene_node_set_position(&toplevel->scene_tree->node,
-			80 + cascade * 40, 86 + cascade * 40);
+			x, y);
 		/* New app windows open on top of everything (macOS behavior),
 		 * not buried under already-running windows. */
 		wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
@@ -2118,6 +3294,7 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 	arrange_toplevel(toplevel);
 	write_window_state(toplevel->server);
 	focus_toplevel(toplevel);
+	server_raise_shell_layers(toplevel->server);
 }
 
 static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
@@ -2130,8 +3307,14 @@ static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
 		struct polluxdesk_toplevel *app;
 		struct polluxdesk_toplevel *tmp;
 		wl_list_for_each_safe(app, tmp, &toplevel->server->toplevels, link) {
-			if (app == toplevel || app->is_desktop ||
-					(app->is_borderless && !app->is_overlay)) {
+			if (app == toplevel || app->is_desktop) {
+				continue;
+			}
+			if (app->is_dock || app->is_menu_bar) {
+				wlr_xdg_toplevel_send_close(app->xdg_toplevel);
+				continue;
+			}
+			if (app->is_borderless && !app->is_overlay) {
 				continue;
 			}
 			wlr_xdg_toplevel_send_close(app->xdg_toplevel);
@@ -2151,6 +3334,7 @@ static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
 	 * canonical empty state so destroy/remap paths never unlink a zeroed node. */
 	wl_list_init(&toplevel->link);
 	write_window_state(toplevel->server);
+	server_raise_shell_layers(toplevel->server);
 }
 
 static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
@@ -2164,7 +3348,12 @@ static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
 		 * reply with a configure so the client can map the surface. The dui
 		 * shells are configured to the output size; normal apps and the
 		 * Launchpad overlay get 0x0 so the client chooses its own dimensions. */
-		if (toplevel->is_desktop ||
+		if (toplevel->is_menu_bar) {
+			struct wlr_box output_box;
+			server_get_output_box(toplevel->server, &output_box);
+			wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel,
+				output_box.width, POLLUXDESK_MENU_BAR_HEIGHT);
+		} else if (toplevel->is_desktop ||
 				(toplevel->is_borderless && !toplevel->is_overlay)) {
 			struct wlr_box output_box;
 			server_get_output_box(toplevel->server, &output_box);
@@ -2212,6 +3401,13 @@ static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
 				? WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE
 				: WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
 	}
+	if (toplevel->restore_geometry_pending &&
+			toplevel->xdg_toplevel->base->geometry.width ==
+				toplevel->restore_geo.width &&
+			toplevel->xdg_toplevel->base->geometry.height ==
+				toplevel->restore_geo.height) {
+		toplevel->restore_geometry_pending = false;
+	}
 	arrange_toplevel(toplevel);
 }
 
@@ -2236,6 +3432,8 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	/* After the node has left the list, so the walk above cannot reach it,
 	 * and before the free. */
 	write_window_state(toplevel->server);
+	server_raise_shell_layers(toplevel->server);
+	free(toplevel->title_text_value);
 	free(toplevel);
 }
 
@@ -2245,9 +3443,19 @@ static void begin_interactive(struct polluxdesk_toplevel *toplevel,
 	 * compositor stops propagating pointer events to clients and instead
 	 * consumes them itself, to move or resize windows. */
 	struct polluxdesk_server *server = toplevel->server;
-
 	server->grabbed_toplevel = toplevel;
 	server->cursor_mode = mode;
+	server->maximize_restore_pending =
+		mode == POLLUXDESK_CURSOR_MOVE && toplevel->maximized;
+	server->maximize_restore_start_x = server->cursor->x;
+	server->maximize_restore_start_y = server->cursor->y;
+	server->drag_last_x = server->cursor->x;
+	server->drag_last_y = server->cursor->y;
+	clock_gettime(CLOCK_MONOTONIC, &server->drag_last_time);
+	server->drag_pending_x = server->drag_pending_y = 0.0;
+	server->drag_pending_token_x = server->drag_pending_token_y = 0;
+	server->drag_released_token_x = server->drag_released_token_y = 0;
+	server->drag_released_sign_x = server->drag_released_sign_y = 0;
 
 	if (mode == POLLUXDESK_CURSOR_MOVE) {
 		server->grab_x = server->cursor->x - toplevel->scene_tree->node.x;
@@ -2339,6 +3547,10 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	toplevel->shadow = wlr_scene_buffer_create(toplevel->scene_tree, NULL);
 	toplevel->shadow->node.data = toplevel;
 	wlr_scene_node_set_enabled(&toplevel->shadow->node, false);
+	const float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	toplevel->content_background = wlr_scene_rect_create(
+		toplevel->scene_tree, 1, 1, white);
+	toplevel->content_background->node.data = toplevel;
 
 	toplevel->content_tree =
 		wlr_scene_xdg_surface_create(toplevel->scene_tree, xdg_toplevel->base);
@@ -2348,6 +3560,9 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	toplevel->titlebar = wlr_scene_rect_create(toplevel->scene_tree, 0, 0,
 		kTitlebarColor);
 	toplevel->titlebar->node.data = toplevel;
+	toplevel->title_text = wlr_scene_buffer_create(toplevel->scene_tree, NULL);
+	toplevel->title_text->node.data = toplevel;
+	wlr_scene_node_set_enabled(&toplevel->title_text->node, false);
 	for (int i = 0; i < 3; ++i) {
 		/* Circular macOS traffic lights: small pre-rendered disc textures. */
 		toplevel->titlebar_buttons[i] =

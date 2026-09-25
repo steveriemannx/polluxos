@@ -41,11 +41,17 @@ unset WAYLAND_DISPLAY DISPLAY
 # can never leave an orphaned 100%-CPU dui process behind.
 run_session() {
     renderer="$1"
+    drm_device="$2"
     # Do not leak the socket selected by a failed renderer attempt into the
     # next attempt; that would make the fallback compositor nest on Wayland.
     unset WAYLAND_DISPLAY DISPLAY
-    WLR_RENDERER="$renderer" dbus-run-session -- "$BIN" \
-        >"/tmp/polluxdesk-greeter.log" 2>&1 &
+    if [ -n "$drm_device" ]; then
+        WLR_DRM_DEVICES="$drm_device" WLR_RENDERER="$renderer" \
+            dbus-run-session -- "$BIN" >"/tmp/polluxdesk-greeter.log" 2>&1 &
+    else
+        WLR_RENDERER="$renderer" dbus-run-session -- "$BIN" \
+            >"/tmp/polluxdesk-greeter.log" 2>&1 &
+    fi
     compositor_pid=$!
     stop_compositor() {
         pkill -TERM -P "$compositor_pid" 2>/dev/null || true
@@ -153,8 +159,32 @@ run_session() {
     return "$rc"
 }
 
-if run_session gles2; then
-    exit 0
+run_gpu() {
+    drm_device="$1"
+    if run_session gles2 "$drm_device"; then
+        return 0
+    fi
+    run_session pixman "$drm_device"
+}
+
+# Prefer NVIDIA when both GPUs are present (card1 on the current laptop), then
+# fall back to the other DRM card. On a single-GPU host, card0 is tried alone.
+DRM_DEVICES="${POLLUX_DRM_DEVICES:-/dev/dri/card1 /dev/dri/card0}"
+tried=0
+for drm_device in $DRM_DEVICES; do
+    [ -c "$drm_device" ] || continue
+    tried=1
+    if run_gpu "$drm_device"; then
+        exit 0
+    fi
+done
+
+# Preserve wlroots' normal device discovery if no explicit DRM node exists.
+if [ "$tried" -eq 0 ]; then
+    if run_session gles2 ""; then
+        exit 0
+    fi
+    run_session pixman ""
+    exit $?
 fi
-run_session pixman
-exit $?
+exit 1

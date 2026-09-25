@@ -333,16 +333,16 @@ void LaunchPadForm::ScanDesktopApps(std::vector<DesktopApp>& apps)
     // Keep the native settings application and the activity monitor visible in
     // Apps on a fresh system.
     if (home != nullptr) {
-        U8String settingsExec = U8String("\"") + home +
-            "\"" POLLUX_BIN "/polluxdesk_settings\"";
+        U8String settingsExec = U8String("\"") + POLLUX_BIN +
+            "/polluxdesk_settings\"";
         apps.push_back({ "屏幕与外观", settingsExec, "polluxdesk/icons/settings.svg" });
 
-        U8String activityExec = U8String("\"") + home +
-            "\"" POLLUX_BIN "/polluxdesk_activity\"";
+        U8String activityExec = U8String("\"") + POLLUX_BIN +
+            "/polluxdesk_activity\"";
         apps.push_back({ "活动监视器", activityExec, "polluxdesk/icons/activity.svg" });
 
-        U8String wifiExec = U8String("\"") + home +
-            "\"" POLLUX_BIN "/polluxdesk_wifi\"";
+        U8String wifiExec = U8String("\"") + POLLUX_BIN +
+            "/polluxdesk_wifi\"";
         apps.push_back({ "Wi-Fi", wifiExec, "polluxdesk/icons/wifi.svg" });
     }
     std::sort(apps.begin(), apps.end(),
@@ -455,7 +455,7 @@ void LaunchPadForm::RefreshAndShow()
                 pIcon->SetAttribute("text_align", "hcenter,vcenter");
                 pIcon->SetAttribute("width", "56");
                 pIcon->SetAttribute("height", "56");
-                pIcon->SetAttribute("margin", "14,0,14,0");
+                pIcon->SetAttribute("margin", "0,0,0,0");
                 pIcon->SetBkColor(kTileColors[colorIndex][0]);
                 pIcon->SetBkColor2(kTileColors[colorIndex][1]);
                 pIcon->SetBkColor2Direction("1");
@@ -477,6 +477,7 @@ void LaunchPadForm::RefreshAndShow()
                 pName->SetAttribute("font", "system_12");
                 pName->SetAttribute("text_color", kTextBody);
                 pName->SetAttribute("text_align", "hcenter,vcenter");
+                pName->SetAttribute("halign", "center");
                 pName->SetAttribute("width", "112");
                 pName->SetAttribute("height", "22");
                 pName->SetStateColor(ui::kControlStateNormal, "#00000000");
@@ -502,7 +503,13 @@ void LaunchPadForm::RefreshAndShow()
 
                 ui::VBox* pTile = new ui::VBox(this);
                 pTile->SetAttribute("width", "112");
-                pTile->AddItem(pIcon);
+                pTile->SetAttribute("child_align", "hcenter,vcenter");
+                ui::HBox* pIconCell = new ui::HBox(this);
+                pIconCell->SetAttribute("width", "stretch");
+                pIconCell->SetAttribute("height", "56");
+                pIconCell->SetAttribute("child_align", "hcenter,vcenter");
+                pIconCell->AddItem(pIcon);
+                pTile->AddItem(pIconCell);
                 pTile->AddItem(pName);
                 pRow->AddItem(pTile);
             }

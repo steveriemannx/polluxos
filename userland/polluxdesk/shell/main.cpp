@@ -26,6 +26,16 @@ private:
         window->CreateWnd(nullptr, ui::WindowCreateParam("PolluxOS Desktop", true));
         window->PostQuitMsgWhenClosed(true);
         window->ShowWindow(ui::kSW_SHOW_NORMAL);
+
+        PolluxOSForm* dock = new PolluxOSForm(true, window);
+        dock->CreateWnd(nullptr, ui::WindowCreateParam("PolluxOS Dock", true));
+        dock->PostQuitMsgWhenClosed(false);
+        dock->ShowWindow(ui::kSW_SHOW_NORMAL);
+
+        PolluxOSForm* menuBar = new PolluxOSForm(false, window, true);
+        menuBar->CreateWnd(nullptr, ui::WindowCreateParam("PolluxOS MenuBar", true));
+        menuBar->PostQuitMsgWhenClosed(false);
+        menuBar->ShowWindow(ui::kSW_SHOW_NORMAL);
     }
 
     virtual void OnCleanup() override

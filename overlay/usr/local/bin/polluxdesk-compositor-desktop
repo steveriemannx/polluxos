@@ -36,12 +36,18 @@ unset WAYLAND_DISPLAY DISPLAY
 # spin at 100% CPU after a session switch.
 run_session() {
     renderer="$1"
+    drm_device="$2"
     # The previous renderer attempt exports WAYLAND_DISPLAY after discovering
     # its socket. Clear it before every new compositor attempt, otherwise the
     # pixman fallback can accidentally select the nested Wayland backend.
     unset WAYLAND_DISPLAY DISPLAY
-    WLR_RENDERER="$renderer" dbus-run-session -- "$BIN" \
-        >"/tmp/polluxdesk-desktop.log" 2>&1 &
+    if [ -n "$drm_device" ]; then
+        WLR_DRM_DEVICES="$drm_device" WLR_RENDERER="$renderer" \
+            dbus-run-session -- "$BIN" >"/tmp/polluxdesk-desktop.log" 2>&1 &
+    else
+        WLR_RENDERER="$renderer" dbus-run-session -- "$BIN" \
+            >"/tmp/polluxdesk-desktop.log" 2>&1 &
+    fi
     compositor_pid=$!
     stop_compositor() {
         pkill -TERM -P "$compositor_pid" 2>/dev/null || true
@@ -104,8 +110,32 @@ run_session() {
 }
 
 printf '%s\n' "$$" > "$SESSION_PID_FILE"
-if run_session gles2; then
-    exit 0
+run_gpu() {
+    drm_device="$1"
+    if run_session gles2 "$drm_device"; then
+        return 0
+    fi
+    run_session pixman "$drm_device"
+}
+
+# This laptop enumerates NVIDIA as card1 and AMD as card0. On a single-GPU
+# desktop, card1 is absent and card0 (the GTX 1060) is tried directly.
+DRM_DEVICES="${POLLUX_DRM_DEVICES:-/dev/dri/card1 /dev/dri/card0}"
+tried=0
+for drm_device in $DRM_DEVICES; do
+    [ -c "$drm_device" ] || continue
+    tried=1
+    if run_gpu "$drm_device"; then
+        exit 0
+    fi
+done
+
+# Preserve wlroots' normal device discovery if no explicit DRM node exists.
+if [ "$tried" -eq 0 ]; then
+    if run_session gles2 ""; then
+        exit 0
+    fi
+    run_session pixman ""
+    exit $?
 fi
-run_session pixman
-exit $?
+exit 1

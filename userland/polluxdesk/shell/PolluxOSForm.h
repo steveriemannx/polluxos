@@ -32,7 +32,9 @@ class PolluxOSForm : public ui::WindowImplBase
 {
     typedef ui::WindowImplBase BaseClass;
 public:
-    PolluxOSForm();
+    explicit PolluxOSForm(bool dockOverlay = false,
+                          PolluxOSForm* desktopOwner = nullptr,
+                          bool menuOverlay = false);
     virtual ~PolluxOSForm() override;
 
     /** Resource-related interfaces: pure code mode, no layout XML is loaded. */
@@ -75,6 +77,10 @@ private:
     void BuildMenuBar(ui::VBox* pRoot);
     void BuildDesktopArea(ui::VBox* pRoot);
     void BuildDock(ui::VBox* pRoot);
+    void SetCompositorMenuOpen(bool open, int menuHeight = 0);
+    void UpdateDockHitArea();
+    void SetDockCompositorTitle();
+    void RequestRestoreWindow(unsigned long id);
 
     void StartClock();
     void UpdateClock();
@@ -194,6 +200,15 @@ private:
     // the menus and everything else that follows the appearance read it here
     // rather than re-reading the file per control.
     pollux::Settings m_settings;
+    bool m_dockOverlay = false;
+    PolluxOSForm* m_desktopOwner = nullptr;
+    bool m_menuOverlay = false;
+    ui::HBox* m_pDockBar = nullptr;
+    ui::UiRect m_dockHitArea;
+    int m_dockHitRadius = 0;
+    bool m_dockHitAreaValid = false;
+    bool m_dockMenuOpen = false;
+    std::vector<ui::Control*> m_dockDotAnchors;
 
     // Window state published by the compositor, refreshed on the clock timer.
     // Polled rather than signalled: the shell already ticks once a second and

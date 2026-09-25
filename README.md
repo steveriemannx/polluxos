@@ -80,6 +80,26 @@ kernel (vt + efifb/drm) ──► /dev/dri KMS ──► mesa/EGL ──► dui 
 
 - The FreeBSD kernel provides KMS/DRM and vt(4); the userland Wayland stack
   comes from ports/pkg; dui builds with `-DDUI_ENABLE_WAYLAND=ON`.
+- `config/rc.conf` enables `seatd` and loads AMD/NVIDIA DRM modules. GPU kernel
+  modules must be installed for the running FreeBSD release, and the user
+  starting the compositor must belong to the `video` group.
+- **GTX 1060 (Pascal) hosts:** use the NVIDIA 580 legacy driver branch
+  with `nvidia-drm` built for the running FreeBSD kernel ABI. The 595 branch no
+  longer supports pre-Turing GPUs. Check `uname -K` against the kmod's ABI
+  before installing a prebuilt module; `overlay/boot/loader.conf` enables the
+  required NVIDIA DRM modesetting.
+  The Ryzen 5 2600 has no integrated GPU, so connect the monitor to the GTX
+  1060, not the motherboard video outputs.
+- A laptop with a Ryzen 4800H can appear to work through its Radeon iGPU even
+  when its NVIDIA GPU is not usable by wlroots; successful laptop startup does
+  not validate a Pascal-only desktop. For X11-only NVIDIA setups, use the
+  `xfce-desktop` session rather than the wlroots DRM session.
+- The compositor launch scripts try `/dev/dri/card1` first and then
+  `/dev/dri/card0`, each with GLES2 followed by Pixman. On the current hybrid
+  laptop, `card1` is NVIDIA and `card0` is AMD; a one-GPU GTX 1060 host skips the
+  missing `card1` and tries its NVIDIA `card0`. Override the order with the
+  space-separated `POLLUX_DRM_DEVICES` environment variable. Module load order
+  alone does not choose the GPU used by wlroots.
 - The image is GPT (FAT EFI partition with loader.efi + UFS2 rootfs): dd it and
   boot. No installer yet — a minimal "pick a disk, gpart + dd" installer can be
   written later if needed.
