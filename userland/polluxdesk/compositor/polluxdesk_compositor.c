@@ -632,6 +632,12 @@ static void arrange_toplevel(struct polluxdesk_toplevel *toplevel) {
 	if (height <= 0) {
 		height = xdg_toplevel->base->surface->current.height;
 	}
+	/* xdg window geometry can include an invisible client-side titlebar
+	 * inset above the root surface. It shifts the surface down by -geo.y, so
+	 * exclude that inset from the visible client height as well. */
+	if (geo.y < 0 && height > -geo.y) {
+		height += geo.y;
+	}
 	if (width < 1) {
 		width = 1;
 	}
@@ -648,7 +654,13 @@ static void arrange_toplevel(struct polluxdesk_toplevel *toplevel) {
 	/* App content is usually a separate scene subtree below the server
 	 * titlebar. Client-side decorated windows keep their content at y=0 but
 	 * still receive the compositor's system shadow. */
-	wlr_scene_node_set_position(&toplevel->content_tree->node, 0, titlebar_height);
+	/* Some Wayland clients (including winit before it receives the server-side
+	 * decoration configure) report a negative geometry.y for their invisible
+	 * client-side titlebar inset. Cancel that inset so the content starts at
+	 * the compositor titlebar instead of leaving a strip of wallpaper below it. */
+	int geometry_inset_y = geo.y < 0 ? geo.y : 0;
+	wlr_scene_node_set_position(&toplevel->content_tree->node,
+		0, titlebar_height + geometry_inset_y);
 	wlr_scene_node_set_enabled(&toplevel->titlebar->node, !no_server_titlebar);
 	for (int i = 0; i < 3; ++i) {
 		wlr_scene_node_set_enabled(&toplevel->titlebar_buttons[i]->node,
@@ -755,6 +767,9 @@ static void toplevel_visible_box(struct polluxdesk_toplevel *toplevel,
 	int height = geo.height > 0 ? geo.height :
 		(xdg_toplevel->base->surface->current.height > 0
 			? xdg_toplevel->base->surface->current.height : 1);
+	if (geo.y < 0 && height > -geo.y) {
+		height += geo.y;
+	}
 	int titlebar = toplevel_titlebar_height(toplevel);
 	box->x = (int)toplevel->scene_tree->node.x;
 	box->y = (int)toplevel->scene_tree->node.y;
@@ -2097,7 +2112,9 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 		wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
 	}
 
-	wl_list_insert(&toplevel->server->toplevels, &toplevel->link);
+	if (wl_list_empty(&toplevel->link)) {
+		wl_list_insert(&toplevel->server->toplevels, &toplevel->link);
+	}
 	arrange_toplevel(toplevel);
 	write_window_state(toplevel->server);
 	focus_toplevel(toplevel);
@@ -2126,11 +2143,12 @@ static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
 		reset_cursor_mode(toplevel->server);
 	}
 
-	wl_list_remove(&toplevel->link);
-	/* wl_list_remove leaves the node's next/prev pointers untouched, so a
-	 * later destroy event would see the node as "not empty" and remove it a
-	 * second time, corrupting server->toplevels and crashing the compositor
-	 * when an app closes. Reinitialize the node immediately. */
+	if (!wl_list_empty(&toplevel->link)) {
+		wl_list_remove(&toplevel->link);
+	}
+	/* An xdg toplevel may be destroyed without ever mapping, or be unmapped
+	 * more than once while the client tears down. Keep the list node in the
+	 * canonical empty state so destroy/remap paths never unlink a zeroed node. */
 	wl_list_init(&toplevel->link);
 	write_window_state(toplevel->server);
 }
@@ -2213,6 +2231,7 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	if (!wl_list_empty(&toplevel->link)) {
 		wl_list_remove(&toplevel->link);
 	}
+	wl_list_init(&toplevel->link);
 	wlr_scene_node_destroy(&toplevel->scene_tree->node);
 	/* After the node has left the list, so the walk above cannot reach it,
 	 * and before the free. */
@@ -2307,6 +2326,7 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	 * has two separated children: the compositor-drawn titlebar (server side,
 	 * like macOS/Windows) and the client-drawn content surface. */
 	struct polluxdesk_toplevel *toplevel = calloc(1, sizeof(*toplevel));
+	wl_list_init(&toplevel->link);
 	toplevel->server = server;
 	toplevel->xdg_toplevel = xdg_toplevel;
 	toplevel_update_shell_flags(toplevel);
