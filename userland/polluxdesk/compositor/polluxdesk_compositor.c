@@ -124,6 +124,8 @@ struct polluxdesk_server {
 	struct wl_listener cursor_button;
 	struct wl_listener cursor_axis;
 	struct wl_listener cursor_frame;
+	struct polluxdesk_toplevel *hovered_titlebar_toplevel;
+	int hovered_titlebar_button;
 
 	struct wlr_seat *seat;
 	struct wlr_virtual_pointer_manager_v1 *virtual_pointer_mgr;
@@ -208,6 +210,9 @@ struct polluxdesk_toplevel {
 	int dock_glass_radius;
 	struct wlr_scene_buffer *title_text;
 	struct wlr_scene_buffer *titlebar_buttons[3];
+	struct wlr_buffer *titlebar_button_buffers[3][2];
+	struct wlr_scene_buffer *titlebar_button_glyphs[3];
+	int titlebar_button_color_state;
 	struct wlr_scene_buffer *corners[4];   /* rounded-corner wallpaper masks */
 	int corner_abs_y;                      /* gradient key of the corner masks */
 	int corner_shadow_alpha;
@@ -285,6 +290,9 @@ static const float kButtonColors[3][4] = {
 	{ 1.00f, 0.37f, 0.34f, 1.0f },
 	{ 1.00f, 0.74f, 0.18f, 1.0f },
 	{ 0.16f, 0.79f, 0.25f, 1.0f },
+};
+static const float kInactiveButtonColor[4] = {
+	0.68f, 0.69f, 0.71f, 1.0f,
 };
 
 /* Frosted titlebar / light Big Sur gradient. */
@@ -665,10 +673,11 @@ static void cursor_draw_line(uint32_t *pixels, int size,
 	int sx = x0 < x1 ? 1 : -1;
 	int sy = y0 < y1 ? 1 : -1;
 	int err = dx - dy;
-	int half = thickness / 2;
+	int first_offset = -(thickness - 1) / 2;
+	int last_offset = thickness / 2;
 	while (true) {
-		for (int oy = -half; oy <= half; ++oy) {
-			for (int ox = -half; ox <= half; ++ox) {
+		for (int oy = first_offset; oy <= last_offset; ++oy) {
+			for (int ox = first_offset; ox <= last_offset; ++ox) {
 				cursor_put_pixel(pixels, size, x0 + ox, y0 + oy, color);
 			}
 		}
@@ -703,6 +712,44 @@ static void cursor_fill_triangle(uint32_t *pixels, int size,
 			if (!(has_neg && has_pos)) {
 				cursor_put_pixel(pixels, size, x, y, color);
 			}
+		}
+	}
+}
+
+static bool cursor_point_in_triangle(double px, double py,
+		double x0, double y0, double x1, double y1, double x2, double y2) {
+	double d1 = (px - x0) * (y1 - y0) - (py - y0) * (x1 - x0);
+	double d2 = (px - x1) * (y2 - y1) - (py - y1) * (x2 - x1);
+	double d3 = (px - x2) * (y0 - y2) - (py - y2) * (x0 - x2);
+	bool has_neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+	bool has_pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+	return !(has_neg && has_pos);
+}
+
+/* Four-sample coverage keeps half-pixel icon placement centered and crisp. */
+static void cursor_fill_triangle_antialiased(uint32_t *pixels, int size,
+		double x0, double y0, double x1, double y1,
+		double x2, double y2) {
+	const double sample[2] = { 0.25, 0.75 };
+	for (int y = 0; y < size; ++y) {
+		for (int x = 0; x < size; ++x) {
+			int covered = 0;
+			for (int sy = 0; sy < 2; ++sy) {
+				for (int sx = 0; sx < 2; ++sx) {
+					covered += cursor_point_in_triangle(x + sample[sx],
+						y + sample[sy], x0, y0, x1, y1, x2, y2);
+				}
+			}
+			if (covered == 0) {
+				continue;
+			}
+			size_t index = (size_t)y * size + x;
+			uint32_t alpha = (uint32_t)(covered * 255 + 2) / 4;
+			uint32_t old_alpha = pixels[index] >> 24;
+			uint32_t out_alpha = alpha +
+				(old_alpha * (255 - alpha) + 127) / 255;
+			/* The glyphs are black, so the premultiplied RGB channels are 0. */
+			pixels[index] = out_alpha << 24;
 		}
 	}
 }
@@ -743,6 +790,36 @@ static struct wlr_buffer *resize_cursor_buffer_create(int direction) {
 		cursor_fill_triangle(p, size, 7, 21, 8, 13, 15, 20, black);
 	}
 
+	wlr_buffer_init(&buf->base, &shadow_buffer_impl, size, size);
+	return &buf->base;
+}
+
+/* Black symbols shown over a traffic light only while its button is hovered. */
+static struct wlr_buffer *titlebar_button_glyph_buffer_create(int button) {
+	const int size = POLLUXDESK_BUTTON_SIZE;
+	struct polluxdesk_shadow_buffer *buf = calloc(1, sizeof(*buf));
+	if (buf == NULL) {
+		return NULL;
+	}
+	buf->pixels = calloc((size_t)size * size, sizeof(uint32_t));
+	if (buf->pixels == NULL) {
+		free(buf);
+		return NULL;
+	}
+	const uint32_t black = 0xFF000000u;
+	uint32_t *pixels = buf->pixels;
+	if (button == POLLUXDESK_BUTTON_CLOSE) {
+		cursor_draw_line(pixels, size, 5, 5, 10, 10, 2, black);
+		cursor_draw_line(pixels, size, 10, 5, 5, 10, 2, black);
+	} else if (button == POLLUXDESK_BUTTON_MINIMIZE) {
+		cursor_draw_line(pixels, size, 5, 8, 10, 8, 2, black);
+	} else {
+		/* Two centered solid triangles, mirrored around the button center. */
+		cursor_fill_triangle_antialiased(pixels, size,
+			4.5, 4.5, 4.5, 8.5, 8.5, 4.5);
+		cursor_fill_triangle_antialiased(pixels, size,
+			10.5, 10.5, 10.5, 6.5, 6.5, 10.5);
+	}
 	wlr_buffer_init(&buf->base, &shadow_buffer_impl, size, size);
 	return &buf->base;
 }
@@ -1253,6 +1330,24 @@ static void toplevel_update_title_text(struct polluxdesk_toplevel *toplevel,
 	wlr_scene_node_set_enabled(&toplevel->title_text->node, true);
 }
 
+static void toplevel_update_button_color_state(
+		struct polluxdesk_toplevel *toplevel) {
+	bool hovered = toplevel->server->hovered_titlebar_toplevel == toplevel &&
+		toplevel->server->hovered_titlebar_button != -1;
+	int color_state = toplevel->activated || hovered ? 1 : 0;
+	if (toplevel->titlebar_button_color_state == color_state) {
+		return;
+	}
+	for (int i = 0; i < 3; ++i) {
+		struct wlr_buffer *buffer =
+			toplevel->titlebar_button_buffers[i][color_state];
+		if (buffer != NULL) {
+			wlr_scene_buffer_set_buffer(toplevel->titlebar_buttons[i], buffer);
+		}
+	}
+	toplevel->titlebar_button_color_state = color_state;
+}
+
 static void arrange_toplevel(struct polluxdesk_toplevel *toplevel) {
 	struct wlr_xdg_toplevel *xdg_toplevel = toplevel->xdg_toplevel;
 	struct wlr_box geo = xdg_toplevel->base->geometry;
@@ -1306,9 +1401,14 @@ static void arrange_toplevel(struct polluxdesk_toplevel *toplevel) {
 		0, titlebar_height + geometry_inset_y);
 	wlr_scene_rect_set_size(toplevel->content_background, width, height);
 	wlr_scene_node_set_enabled(&toplevel->titlebar->node, show_titlebar);
+	toplevel_update_button_color_state(toplevel);
 	for (int i = 0; i < 3; ++i) {
 		wlr_scene_node_set_enabled(&toplevel->titlebar_buttons[i]->node,
 			show_titlebar);
+		bool hovered = toplevel->server->hovered_titlebar_toplevel == toplevel &&
+			toplevel->server->hovered_titlebar_button == i;
+		wlr_scene_node_set_enabled(&toplevel->titlebar_button_glyphs[i]->node,
+			show_titlebar && hovered);
 	}
 	int chrome_y = toplevel->fullscreen ? POLLUXDESK_MENU_BAR_HEIGHT : 0;
 	wlr_scene_node_set_position(&toplevel->titlebar->node, 0, chrome_y);
@@ -1322,9 +1422,14 @@ static void arrange_toplevel(struct polluxdesk_toplevel *toplevel) {
 	if (show_titlebar) {
 		wlr_scene_rect_set_size(toplevel->titlebar, width, POLLUXDESK_TITLEBAR_HEIGHT);
 		for (int i = 0; i < 3; ++i) {
+			int button_x = 14 + i * 22;
+			int button_y = chrome_y +
+				(POLLUXDESK_TITLEBAR_HEIGHT - POLLUXDESK_BUTTON_SIZE) / 2;
 			wlr_scene_node_set_position(&toplevel->titlebar_buttons[i]->node,
-				14 + i * 22, chrome_y +
-				(POLLUXDESK_TITLEBAR_HEIGHT - POLLUXDESK_BUTTON_SIZE) / 2);
+				button_x, button_y);
+			wlr_scene_node_set_position(
+				&toplevel->titlebar_button_glyphs[i]->node,
+				button_x, button_y);
 		}
 	}
 	toplevel_update_title_text(toplevel, width, show_titlebar);
@@ -2493,11 +2598,67 @@ static int titlebar_button_at(struct polluxdesk_toplevel *toplevel,
 		return -1;
 	}
 	for (int i = 0; i < 3; ++i) {
-		if (node == &toplevel->titlebar_buttons[i]->node) {
+		if (node == &toplevel->titlebar_buttons[i]->node ||
+			node == &toplevel->titlebar_button_glyphs[i]->node) {
 			return i;
 		}
 	}
 	return -1;
+}
+
+static bool titlebar_button_group_at(struct polluxdesk_toplevel *toplevel,
+		double lx, double ly) {
+	if (toplevel->is_borderless || toplevel->client_side_decorated) {
+		return false;
+	}
+	struct polluxdesk_toplevel *menu_bar =
+		server_get_menu_bar(toplevel->server);
+	bool fullscreen_chrome_visible =
+		toplevel->server->fullscreen_chrome_visible ||
+		(menu_bar != NULL && menu_bar->menu_open);
+	if (toplevel->fullscreen && !fullscreen_chrome_visible) {
+		return false;
+	}
+	int chrome_y = toplevel->fullscreen ? POLLUXDESK_MENU_BAR_HEIGHT : 0;
+	double left = toplevel->scene_tree->node.x + 14;
+	double top = toplevel->scene_tree->node.y + chrome_y +
+		(POLLUXDESK_TITLEBAR_HEIGHT - POLLUXDESK_BUTTON_SIZE) / 2;
+	double right = left + 2 * 22 + POLLUXDESK_BUTTON_SIZE;
+	double bottom = top + POLLUXDESK_BUTTON_SIZE;
+	return lx >= left && lx < right && ly >= top && ly < bottom;
+}
+
+static void server_set_titlebar_button_hover(
+		struct polluxdesk_server *server,
+		struct polluxdesk_toplevel *toplevel, int button) {
+	if (button == -1) {
+		toplevel = NULL;
+	}
+	if (server->hovered_titlebar_toplevel == toplevel &&
+		server->hovered_titlebar_button == button) {
+		return;
+	}
+	if (server->hovered_titlebar_toplevel != NULL &&
+		server->hovered_titlebar_button >= 0) {
+		wlr_scene_node_set_enabled(
+			&server->hovered_titlebar_toplevel->titlebar_button_glyphs[
+				server->hovered_titlebar_button]->node, false);
+	}
+	struct polluxdesk_toplevel *previous = server->hovered_titlebar_toplevel;
+	server->hovered_titlebar_toplevel = toplevel;
+	server->hovered_titlebar_button = button;
+	if (previous != NULL) {
+		toplevel_update_button_color_state(previous);
+	}
+	if (toplevel != NULL) {
+		if (toplevel != previous) {
+			toplevel_update_button_color_state(toplevel);
+		}
+		if (button >= 0) {
+			wlr_scene_node_set_enabled(
+				&toplevel->titlebar_button_glyphs[button]->node, true);
+		}
+	}
 }
 
 static void reset_cursor_mode(struct polluxdesk_server *server) {
@@ -2814,6 +2975,14 @@ static void process_cursor_motion(struct polluxdesk_server *server, uint32_t tim
 	struct wlr_scene_node *node = NULL;
 	struct polluxdesk_toplevel *toplevel = desktop_toplevel_at(server,
 			server->cursor->x, server->cursor->y, &surface, &sx, &sy, &node);
+	int hovered_button = toplevel != NULL
+		? titlebar_button_at(toplevel, node) : -1;
+	if (hovered_button == -1 && toplevel != NULL &&
+			titlebar_button_group_at(toplevel,
+				server->cursor->x, server->cursor->y)) {
+		hovered_button = -2;
+	}
+	server_set_titlebar_button_hover(server, toplevel, hovered_button);
 
 	/* Server-drawn borders: show a resize cursor and keep the border events
 	 * inside the compositor so clients only see content-area pointer input. */
@@ -3371,6 +3540,9 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
 	/* Called when the surface is unmapped, and should no longer be shown. */
 	struct polluxdesk_toplevel *toplevel = wl_container_of(listener, toplevel, unmap);
+	if (toplevel->server->hovered_titlebar_toplevel == toplevel) {
+		server_set_titlebar_button_hover(toplevel->server, NULL, -1);
+	}
 
 	/* When the desktop shell exits (logout/restart), close every app window
 	 * and overlay so they never leak onto the greeter or the next session. */
@@ -3486,6 +3658,9 @@ static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
 static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	/* Called when the xdg_toplevel is destroyed. */
 	struct polluxdesk_toplevel *toplevel = wl_container_of(listener, toplevel, destroy);
+	if (toplevel->server->hovered_titlebar_toplevel == toplevel) {
+		server_set_titlebar_button_hover(toplevel->server, NULL, -1);
+	}
 
 	wl_list_remove(&toplevel->map.link);
 	wl_list_remove(&toplevel->unmap.link);
@@ -3501,6 +3676,13 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	}
 	wl_list_init(&toplevel->link);
 	wlr_scene_node_destroy(&toplevel->scene_tree->node);
+	for (int i = 0; i < 3; ++i) {
+		for (int state = 0; state < 2; ++state) {
+			if (toplevel->titlebar_button_buffers[i][state] != NULL) {
+				wlr_buffer_drop(toplevel->titlebar_button_buffers[i][state]);
+			}
+		}
+	}
 	/* After the node has left the list, so the walk above cannot reach it,
 	 * and before the free. */
 	write_window_state(toplevel->server);
@@ -3640,13 +3822,27 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 		/* Circular macOS traffic lights: small pre-rendered disc textures. */
 		toplevel->titlebar_buttons[i] =
 			wlr_scene_buffer_create(toplevel->scene_tree, NULL);
-		struct wlr_buffer *buffer =
-			circle_button_buffer_create(kButtonColors[i], POLLUXDESK_BUTTON_SIZE);
-		if (buffer != NULL) {
-			wlr_scene_buffer_set_buffer(toplevel->titlebar_buttons[i], buffer);
-			wlr_buffer_drop(buffer);
+		toplevel->titlebar_button_buffers[i][0] =
+			circle_button_buffer_create(kInactiveButtonColor,
+				POLLUXDESK_BUTTON_SIZE);
+		toplevel->titlebar_button_buffers[i][1] =
+			circle_button_buffer_create(kButtonColors[i],
+				POLLUXDESK_BUTTON_SIZE);
+		if (toplevel->titlebar_button_buffers[i][0] != NULL) {
+			wlr_scene_buffer_set_buffer(toplevel->titlebar_buttons[i],
+				toplevel->titlebar_button_buffers[i][0]);
 		}
 		toplevel->titlebar_buttons[i]->node.data = toplevel;
+		toplevel->titlebar_button_glyphs[i] =
+			wlr_scene_buffer_create(toplevel->scene_tree, NULL);
+		struct wlr_buffer *glyph = titlebar_button_glyph_buffer_create(i);
+		if (glyph != NULL) {
+			wlr_scene_buffer_set_buffer(toplevel->titlebar_button_glyphs[i], glyph);
+			wlr_buffer_drop(glyph);
+		}
+		toplevel->titlebar_button_glyphs[i]->node.data = toplevel;
+		wlr_scene_node_set_enabled(
+			&toplevel->titlebar_button_glyphs[i]->node, false);
 	}
 
 	/* Rounded-corner masks; painted last so they cover the titlebar and the
@@ -3767,6 +3963,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	struct polluxdesk_server server = {0};
+	server.hovered_titlebar_button = -1;
 	/* The Wayland display is managed by libwayland. It handles accepting
 	 * clients from the Unix socket, managing Wayland globals, and so on. */
 	server.wl_display = wl_display_create();
