@@ -14,6 +14,8 @@ pkill -x launcher 2>/dev/null || true
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run/xdg/${USER:-$(id -un)}}"
 mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
 chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
+DESKTOP_READY_MARKER="$XDG_RUNTIME_DIR/polluxdesk-desktop-ready"
+rm -f "$DESKTOP_READY_MARKER" 2>/dev/null || true
 
 # Sockets left behind by earlier sessions are matched by the discovery loop
 # below, and the client then connects to a dead socket and exits without a
@@ -103,6 +105,23 @@ run_session() {
         fi
     }
 
+    # A process name only tells us that polluxdesk has started, not that its
+    # desktop, dock and menu-bar surfaces are ready. Keep the greeter alive
+    # until the compositor publishes the mapped-surface handshake.
+    wait_for_desktop_ready() {
+        candidate_pid="$1"
+        waited=0
+        while [ ! -e "$DESKTOP_READY_MARKER" ] && [ "$waited" -lt 300 ]; do
+            if ! kill -0 "$candidate_pid" 2>/dev/null ||
+               ! kill -0 "$compositor_pid" 2>/dev/null; then
+                return 1
+            fi
+            sleep 0.1
+            waited=$((waited + 1))
+        done
+        [ -e "$DESKTOP_READY_MARKER" ]
+    }
+
     # If the current shell client exits, fail the attempt rather than leaving a
     # compositor showing only its wallpaper and waiting forever for a dead
     # client.
@@ -113,12 +132,15 @@ run_session() {
         next_pid="$(other_client)"
         if [ -n "$next_pid" ] && [ "$next_pid" != "$client_pid" ] &&
            kill -0 "$next_pid" 2>/dev/null; then
-            kill "$client_pid" 2>/dev/null || true
-            client_pid="$next_pid"
-            if [ "$client_name" = "launcher" ]; then
-                client_name=polluxdesk
-            else
-                client_name=launcher
+            if [ "$client_name" != "launcher" ] ||
+               wait_for_desktop_ready "$next_pid"; then
+                kill "$client_pid" 2>/dev/null || true
+                client_pid="$next_pid"
+                if [ "$client_name" = "launcher" ]; then
+                    client_name=polluxdesk
+                else
+                    client_name=launcher
+                fi
             fi
         fi
         if ! kill -0 "$client_pid" 2>/dev/null; then

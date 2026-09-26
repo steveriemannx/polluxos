@@ -13,6 +13,7 @@
 #include <math.h>
 #include <time.h>
 #include <signal.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fontconfig/fontconfig.h>
@@ -222,6 +223,7 @@ struct polluxdesk_toplevel {
 	bool title_text_valid;
 	bool is_desktop;
 	bool is_dock;
+	bool is_login_shell;
 	struct wlr_box dock_hit_box;
 	int dock_hit_radius;
 	bool dock_hit_box_valid;
@@ -730,13 +732,15 @@ static struct wlr_buffer *resize_cursor_buffer_create(int direction) {
 		cursor_fill_triangle(p, size, 14, 4, 9, 10, 19, 10, black);
 		cursor_fill_triangle(p, size, 14, 23, 9, 17, 19, 17, black);
 	} else if (direction == POLLUXDESK_RESIZE_CURSOR_NWSE) {
-		cursor_draw_line(p, size, 6, 6, 21, 21, 3, black);
-		cursor_fill_triangle(p, size, 4, 4, 11, 6, 6, 11, black);
-		cursor_fill_triangle(p, size, 23, 23, 16, 21, 21, 16, black);
+		/* Keep the diagonal tips at the ends, with the shaft tucked slightly
+		 * under each arrowhead just like the horizontal cursor. */
+		cursor_draw_line(p, size, 9, 9, 19, 19, 3, black);
+		cursor_fill_triangle(p, size, 7, 7, 15, 8, 8, 15, black);
+		cursor_fill_triangle(p, size, 21, 21, 13, 20, 20, 13, black);
 	} else {
-		cursor_draw_line(p, size, 21, 6, 6, 21, 3, black);
-		cursor_fill_triangle(p, size, 23, 4, 21, 11, 16, 6, black);
-		cursor_fill_triangle(p, size, 4, 23, 6, 16, 11, 21, black);
+		cursor_draw_line(p, size, 19, 9, 9, 19, 3, black);
+		cursor_fill_triangle(p, size, 21, 7, 13, 8, 20, 15, black);
+		cursor_fill_triangle(p, size, 7, 21, 8, 13, 15, 20, black);
 	}
 
 	wlr_buffer_init(&buf->base, &shadow_buffer_impl, size, size);
@@ -1099,6 +1103,46 @@ static struct polluxdesk_toplevel *server_get_menu_bar(
 	return NULL;
 }
 
+static void desktop_ready_marker_set(bool ready) {
+	const char *runtime_dir = getenv("XDG_RUNTIME_DIR");
+	if (runtime_dir == NULL || runtime_dir[0] == '\0') {
+		return;
+	}
+	char path[1024];
+	int length = snprintf(path, sizeof(path),
+		"%s/polluxdesk-desktop-ready", runtime_dir);
+	if (length < 0 || (size_t)length >= sizeof(path)) {
+		return;
+	}
+	if (!ready) {
+		unlink(path);
+		return;
+	}
+	int fd = open(path, O_WRONLY | O_CREAT | O_CLOEXEC, 0600);
+	if (fd >= 0) {
+		close(fd);
+	}
+}
+
+static void server_update_desktop_ready_marker(
+		struct polluxdesk_server *server) {
+	bool desktop_ready = server_get_desktop(server) != NULL &&
+		server_get_dock(server) != NULL &&
+		server_get_menu_bar(server) != NULL;
+	desktop_ready_marker_set(desktop_ready);
+}
+
+static struct polluxdesk_toplevel *server_get_login_shell(
+		struct polluxdesk_server *server) {
+	struct polluxdesk_toplevel *toplevel;
+	wl_list_for_each(toplevel, &server->toplevels, link) {
+		if (toplevel->is_login_shell && !toplevel->minimized) {
+			return toplevel;
+		}
+	}
+	return NULL;
+}
+
 static struct polluxdesk_toplevel *server_get_fullscreen(
 		struct polluxdesk_server *server) {
 	struct polluxdesk_toplevel *toplevel;
@@ -1125,10 +1169,11 @@ static void toplevel_update_shell_flags(struct polluxdesk_toplevel *toplevel) {
 	toplevel->is_desktop = toplevel_is_desktop_shell(toplevel);
 	toplevel->is_dock = toplevel_is_dock_shell(toplevel);
 	toplevel->is_menu_bar = toplevel_is_menu_bar(toplevel);
+	toplevel->is_login_shell = toplevel_is_login_shell(toplevel);
 	toplevel->is_overlay = toplevel_is_overlay(toplevel);
 	toplevel->is_borderless = toplevel->is_desktop || toplevel->is_dock ||
 		toplevel->is_menu_bar ||
-		toplevel->is_overlay || toplevel_is_login_shell(toplevel);
+		toplevel->is_overlay || toplevel->is_login_shell;
 	toplevel->client_side_decorated =
 		toplevel_is_client_side_decorated(toplevel);
 }
@@ -1437,14 +1482,36 @@ static void server_raise_shell_layers(struct polluxdesk_server *server) {
 	struct polluxdesk_toplevel *shell = server_get_desktop(server);
 	struct polluxdesk_toplevel *dock = server_get_dock(server);
 	struct polluxdesk_toplevel *menu_bar = server_get_menu_bar(server);
+	struct polluxdesk_toplevel *login_shell = server_get_login_shell(server);
 	struct polluxdesk_toplevel *fullscreen = server_get_fullscreen(server);
 	struct polluxdesk_toplevel *overlay = server_get_overlay(server);
+	bool desktop_session_active = shell != NULL;
+	bool login_ready = !desktop_session_active;
+	struct polluxdesk_toplevel *toplevel;
+	if (login_ready) {
+		/* The greeter may connect as soon as the desktop shell exits, but keep
+		 * it hidden until every mapped window from that session has unmapped. */
+		wl_list_for_each(toplevel, &server->toplevels, link) {
+			if (!toplevel->is_login_shell) {
+				login_ready = false;
+				break;
+			}
+		}
+	}
+	wl_list_for_each(toplevel, &server->toplevels, link) {
+		if (toplevel->is_login_shell) {
+			wlr_scene_node_set_enabled(&toplevel->scene_tree->node,
+				login_ready && toplevel == login_shell);
+		}
+	}
 	if (dock != NULL) {
-		wlr_scene_node_set_enabled(&dock->scene_tree->node, fullscreen == NULL);
+		wlr_scene_node_set_enabled(&dock->scene_tree->node,
+			desktop_session_active && fullscreen == NULL);
 	}
 	if (menu_bar != NULL) {
-		bool visible = fullscreen == NULL || server->fullscreen_chrome_visible ||
-			menu_bar->menu_open;
+		bool visible = desktop_session_active &&
+			(fullscreen == NULL || server->fullscreen_chrome_visible ||
+			 menu_bar->menu_open);
 		wlr_scene_node_set_enabled(&menu_bar->scene_tree->node, visible);
 	}
 	if (shell != NULL && shell->menu_open) {
@@ -1475,6 +1542,9 @@ static void server_raise_shell_layers(struct polluxdesk_server *server) {
 	}
 	if (overlay != NULL) {
 		wlr_scene_node_raise_to_top(&overlay->scene_tree->node);
+	}
+	if (login_ready && login_shell != NULL) {
+		wlr_scene_node_raise_to_top(&login_shell->scene_tree->node);
 	}
 }
 
@@ -3295,6 +3365,7 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 	write_window_state(toplevel->server);
 	focus_toplevel(toplevel);
 	server_raise_shell_layers(toplevel->server);
+	server_update_desktop_ready_marker(toplevel->server);
 }
 
 static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
@@ -3335,6 +3406,7 @@ static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
 	wl_list_init(&toplevel->link);
 	write_window_state(toplevel->server);
 	server_raise_shell_layers(toplevel->server);
+	server_update_desktop_ready_marker(toplevel->server);
 }
 
 static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
@@ -3433,6 +3505,7 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	 * and before the free. */
 	write_window_state(toplevel->server);
 	server_raise_shell_layers(toplevel->server);
+	server_update_desktop_ready_marker(toplevel->server);
 	free(toplevel->title_text_value);
 	free(toplevel);
 }
@@ -3673,6 +3746,7 @@ static void server_new_xdg_popup(struct wl_listener *listener, void *data) {
 
 int main(int argc, char *argv[]) {
 	wlr_log_init(WLR_DEBUG, NULL);
+	desktop_ready_marker_set(false);
 	signal(SIGUSR1, settings_signal_handler);
 	char *startup_cmd = NULL;
 
